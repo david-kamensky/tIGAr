@@ -180,6 +180,18 @@ class BSpline(AbstractScalarBasis):
     #def getParametricDimension(self):
     #    return self.nvar
 
+    def getPrealloc(self):
+        totalFuncs = 1
+        for spline in self.splines:
+            # a 1d b-spline should have p+1 active basis functions at any given
+            # point; however, when eval-ing at boundaries of knot spans,
+            # may pick up at most 2 extra basis functions due to epsilons.
+            #
+            # TODO: find a way to automatically ignore those extra nearly-zero
+            # basis functions.
+            totalFuncs *= (spline.p+1 +2)
+        return totalFuncs
+    
     def getNodesAndEvals(self,xi):
 
         if(self.nvar == 1):

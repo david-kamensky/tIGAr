@@ -27,6 +27,7 @@ mpirank = MPI.rank(mycomm)
 from tIGAr.calculusUtils import *
 
 INDEX_TYPE = 'int32'
+#DEFAULT_PREALLOC = 100
 DEFAULT_PREALLOC = 500
 
 # file naming conventions
@@ -46,7 +47,6 @@ EXTRACTION_MAT_FILE_CTRL = "extraction-mat-ctrl.dat"
 # automatically, based on spline, w/ option for manual override.
 #EXTRACTION_ELEMENT = "Lagrange"
 EXTRACTION_ELEMENT = "DG"
-
 
 # helper function to generate an identity permutation IS 
 # given an ownership range
@@ -975,7 +975,8 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         
         return retval
         
-# abstract class representing a scalar basis
+# abstract class representing a scalar basis of functions on a manifold for
+# which we assume that each point has unique coordinates.  
 class AbstractScalarBasis(object):
 
     __metaclass__ = abc.ABCMeta
@@ -999,6 +1000,13 @@ class AbstractScalarBasis(object):
     #@abc.abstractmethod
     #def getParametricDimension(self):
     #    return
+
+    # Override this in subclasses to optimize memory use.  It should return
+    # the maximum number of IGA basis functions whose supports might contain
+    # a finite element node (i.e, the maximum number of nonzero
+    # entries in a row of M corrsponding to that FE basis function.)
+    def getPrealloc(self):
+        return DEFAULT_PREALLOC
     
 # interface needed for a control mesh with a coordinate chart
 class AbstractControlMesh(object):
@@ -1017,7 +1025,11 @@ class AbstractControlMesh(object):
     def getNsd(self):
         return
 
-# interface for a general multi-field spline
+# interface for a general multi-field spline.  The reason that this is
+# a special case of AbstractCoordinateChartSpline (instead of being redundant
+# in light of AbstractExtractionGenerator) is that it uses a collection of
+# AbstractScalarBasis objects, whose getNodesAndEvals() methods require
+# parametric coordinates to correspond to unique points.
 class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
 
     __metaclass__ = abc.ABCMeta
@@ -1026,10 +1038,27 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
     def getControlMesh(self):
         return
 
+    # this is specifically for fields, whereas getScalarSpline() allows for
+    # passing -1 to get the scalar spline associated with the control mesh
     @abc.abstractmethod
     def getFieldSpline(self,field):
         return
 
+    # overrides method inherited from AbstractExtractionGenerator, using
+    # getPrealloc() methods from its AbstractScalarBasis members.
+    def getPrealloc(self,control):
+        if(control):
+            retval = self.getScalarSpline(-1).getPrealloc()
+        else:
+            maxPrealloc = 0
+            for i in range(0,self.getNFields()):
+                prealloc = self.getScalarSpline(i).getPrealloc()
+                if(prealloc > maxPrealloc):
+                    maxPrealloc = prealloc
+            retval = maxPrealloc
+        #print control, retval
+        return retval
+    
     def getScalarSpline(self,field):
         if(field==-1):
             return self.getControlMesh().getScalarSpline()
