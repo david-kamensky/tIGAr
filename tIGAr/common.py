@@ -421,9 +421,9 @@ class ExtractedSpline(object):
         #prealloc = int(lines[lineCount])
 
         # read mesh if none provided
+        f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,'r')
         if(mesh==None):
             self.mesh = Mesh()
-            f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,'r')
             f.read(self.mesh,EXTRACTION_H5_MESH_NAME,True)
         else:
             self.mesh = mesh
@@ -561,7 +561,7 @@ class ExtractedSpline(object):
 
         self.setSolverOptions()
 
-        # linear space on mesh for plotting displacements
+        # linear space on mesh for projecting scalar fields onto
         self.VE_linear = FiniteElement(EXTRACTION_ELEMENT,\
                                        self.mesh.ufl_cell(),1)
         #linearList = []
