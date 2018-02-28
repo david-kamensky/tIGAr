@@ -7,12 +7,12 @@ DEFAULT_RT_PENALTY = Constant(1e1)
 
 # may want to generate the corresponding scalar fields to append to
 # larger lists, in, e.g., monolithic pressure--velocity formulations, or
-# monolithic or partially-segregated MHD formulations
-
+# monolithic or partially-segregated MHD formulations.
 # due to similar code structure, combine RT and N generation; pass
-# RTorN = "RT" or "N"
+# RTorN = "RT" or "N".
 def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
     nvar = len(degrees)
+    useRect = controlMesh.getScalarSpline().useRectangularElements()
     fields = []
     for i in range(0,nvar):
         knotVectors = []
@@ -34,16 +34,13 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
                                          knots, array([knots[-1],])))
             knotVectors += [knots,]
             scalarDegrees += [degree,]
-        fields += [BSpline(scalarDegrees,knotVectors),]
+        fields += [BSpline(scalarDegrees,knotVectors,useRect),]
     return fields
 
-
-# spline with mixed space for just an RT velocity; assume that some sort of
-# iterated penalty type solver is used for the pressure, so there is no
-# pressure variable
+# can be RT or N type B-spline
 class BSplineCompat(AbstractMultiFieldSpline):
 
-    # args: controlMesh, RTorN, degrees, periodicities=None
+    # args: controlMesh, RTorN, degrees, periodicities=None,
     def customSetup(self,args):
         self.controlMesh = args[0]
         self.RTorN = args[1]
@@ -54,7 +51,7 @@ class BSplineCompat(AbstractMultiFieldSpline):
             self.periodicities = None
         self.fields = generateFieldsCompat(self.controlMesh,self.RTorN,\
                                            self.degrees,\
-                                           self.periodicities)
+                                           periodicities=self.periodicities)
     def getControlMesh(self):
         return self.controlMesh
 
@@ -64,6 +61,9 @@ class BSplineCompat(AbstractMultiFieldSpline):
     def getNFields(self):
         return len(self.fields)
 
+# spline with mixed space for just an RT velocity; assume that some sort of
+# iterated penalty type solver is used for the pressure, so there is no
+# pressure variable
 class ExtractedBSplineRT(ExtractedSpline):
 
     def pushforward(self,uhat,F=None):

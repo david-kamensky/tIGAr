@@ -46,7 +46,10 @@ EXTRACTION_MAT_FILE_CTRL = "extraction-mat-ctrl.dat"
 # e.g., for div-conforming VMS; maybe add mechanism later to choose this
 # automatically, based on spline, w/ option for manual override.
 #EXTRACTION_ELEMENT = "Lagrange"
-EXTRACTION_ELEMENT = "DG"
+USE_DG_DEFAULT = True
+
+# whether or not to use tensor product elements by default
+USE_RECT_ELEM_DEFAULT = True
 
 # helper function to generate an identity permutation IS 
 # given an ownership range
@@ -64,11 +67,21 @@ def generateIdentityPermutation(ownRange):
 class AbstractExtractionGenerator(object):
     __metaclass__ = abc.ABCMeta
 
-    # generate from a cottrel-type format
     def __init__(self,*args):
         self.customSetup(args)
         self.genericSetup()
-
+        
+    # what type of element (CG or DG) to extract to
+    # (override in subclass for non-default behavior)
+    def useDG(self):
+        return USE_DG_DEFAULT
+    
+    def extractionElement(self):
+        if(self.useDG()):
+            return "DG"
+        else:
+            return "Lagrange"
+        
     # customized stuff to call in constructor
     @abc.abstractmethod
     def customSetup(self,args):
@@ -161,14 +174,14 @@ class AbstractExtractionGenerator(object):
         
     # common setup steps for all subclasses (called in __init__())
     def genericSetup(self):
-
+        
         self.mesh = self.generateMesh()
 
         # note: if self.nsd is set in a customSetup, then the subclass
         # getNsd() references that, this is still safe
         self.nsd = self.getNsd()
 
-        self.VE_control = FiniteElement(EXTRACTION_ELEMENT,\
+        self.VE_control = FiniteElement(self.extractionElement(),\
                                         self.mesh.ufl_cell(),\
                                         self.getDegree(-1))
         self.V_control = FunctionSpace(self.mesh,self.VE_control)
@@ -177,13 +190,13 @@ class AbstractExtractionGenerator(object):
             VE_components = []
             for i in range(0,self.getNFields()):
                 VE_components \
-                    += [FiniteElement(EXTRACTION_ELEMENT,\
+                    += [FiniteElement(self.extractionElement(),\
                                       self.mesh.ufl_cell(),\
                                       self.getDegree(i)),]
 
             self.VE = MixedElement(VE_components)
         else:
-            self.VE = FiniteElement(EXTRACTION_ELEMENT,\
+            self.VE = FiniteElement(self.extractionElement(),\
                                     self.mesh.ufl_cell(),\
                                     self.getDegree(0))
             
@@ -313,7 +326,7 @@ class AbstractExtractionGenerator(object):
         # write info
         if(mpirank == 0):
             fs = str(self.nsd)+"\n"\
-                 + EXTRACTION_ELEMENT+"\n"\
+                 + self.extractionElement()+"\n"\
                  + str(self.getNFields())+"\n"
             for i in range(-1,self.getNFields()):
                 fs += str(self.getDegree(i))+"\n"\
@@ -562,7 +575,7 @@ class ExtractedSpline(object):
         self.setSolverOptions()
 
         # linear space on mesh for projecting scalar fields onto
-        self.VE_linear = FiniteElement(EXTRACTION_ELEMENT,\
+        self.VE_linear = FiniteElement("Lagrange",\
                                        self.mesh.ufl_cell(),1)
         #linearList = []
         #for i in range(0,self.nsd):
@@ -643,6 +656,12 @@ class ExtractedSpline(object):
 
     def parametricExpression(self,expr):
         return Expression(expr,degree=self.quadDeg)
+
+    def parametricCoordinates(self):
+        return SpatialCoordinate(self.mesh)
+
+    def spatialCoordinates(self):
+        return self.F
     
     def rationalize(self,u):
         return u/(self.cpFuncs[self.nsd])
@@ -998,6 +1017,16 @@ class AbstractScalarBasis(object):
         return
 
     #@abc.abstractmethod
+    # assume DG unless this is overridden by a subclass (as DG will work even
+    # if CG is okay (once they fix DG for quads/hexes at least...))
+    def needsDG(self):
+        return True
+
+    @abc.abstractmethod
+    def useRectangularElements(self):
+        return
+    
+    #@abc.abstractmethod
     #def getParametricDimension(self):
     #    return
 
@@ -1083,6 +1112,12 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
 
     def getNcp(self,field):
         return self.getScalarSpline(field).getNcp()
+
+    def useDG(self):
+        for i in range(-1,self.getNFields()):
+            if(self.getScalarSpline(i).needsDG()):
+                return True
+        return False
 
 # common case of all control functions and fields belonging to the
 # same scalar space.  Note: fields are all stored in homogeneous format, i.e.,

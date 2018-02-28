@@ -7,16 +7,13 @@ from igakit.io import PetIGA
 
 class NURBSControlMesh(AbstractControlMesh):
 
-    def __init__(self,fname):
+    def __init__(self,fname,useRect=USE_RECT_ELEM_DEFAULT):
 
         # get an igakit nurbs object from the file
         ikNURBS = PetIGA().read(fname)
 
         # create a BSpline scalar space given the knot vector(s)
-        self.scalarSpline = BSpline(ikNURBS.degree,ikNURBS.knots)
-
-        # debug
-        #self.control = ExplicitBSplineControlMesh(ikNURBS.degree,ikNURBS.knots)
+        self.scalarSpline = BSpline(ikNURBS.degree,ikNURBS.knots,useRect)
         
         # get the control net; already in homogeneous form
         nvar = len(ikNURBS.degree)
@@ -48,8 +45,6 @@ class NURBSControlMesh(AbstractControlMesh):
 
     def getHomogeneousCoordinate(self,node,direction):
         return self.bnet[node,direction]
-        #return self.control.getHomogeneousCoordinate(node,direction)
 
     def getNsd(self):
         return self.bnet.shape[1]-1
-        #return self.control.getNsd()

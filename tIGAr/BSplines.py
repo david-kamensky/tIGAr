@@ -45,6 +45,14 @@ class BSpline1(object):
                 self.uniqueKnots[ct] = knots[i]
             lastKnot = knots[i]
             self.multiplicities[ct] += 1
+
+    # if any non-end knot is repeated more than p time, then the B-spline
+    # is discontinuous
+    def isDiscontinuous(self):
+        for i in range(1,len(self.uniqueKnots)-1):
+            if(self.multiplicities[i] > self.p):
+                return True
+        return False
         
     # get the number of non-degenerate knot spans
     def computeNel(self):
@@ -168,7 +176,7 @@ def dof2ijk(dof,M,N):
 # higher than 3, since FEniCS only generates meshes up to dimension 3...
 class BSpline(AbstractScalarBasis):
 
-    def __init__(self,degrees,kvecs):
+    def __init__(self,degrees,kvecs,useRect=USE_RECT_ELEM_DEFAULT):
         self.nvar = len(degrees)
         if(self.nvar > 3 or self.nvar < 1):
             print("ERROR: Unsupported parametric dimension.")
@@ -176,10 +184,21 @@ class BSpline(AbstractScalarBasis):
         self.splines = []
         for i in range(0,self.nvar):
             self.splines += [BSpline1(degrees[i],kvecs[i]),]
+        self.useRect = useRect
 
     #def getParametricDimension(self):
     #    return self.nvar
 
+    def needsDG(self):
+        # check whether any of the univariate splines is discontinuous
+        for i in range(0,self.nvar):
+            if(self.splines[i].isDiscontinuous()):
+                return True
+        return False
+
+    def useRectangularElements(self):
+        return self.useRect
+    
     def getPrealloc(self):
         totalFuncs = 1
         for spline in self.splines:
@@ -246,7 +265,7 @@ class BSpline(AbstractScalarBasis):
                                     dersu[i]*dersv[j]*dersw[k]],]
             return retval
         
-    def generateMesh(self):
+    def generateMesh(self):        
         if(self.nvar == 1):
             spline = self.splines[0]
             mesh = IntervalMesh(spline.nel,0.0,float(spline.nel))
@@ -260,14 +279,21 @@ class BSpline(AbstractScalarBasis):
         elif(self.nvar == 2):
             uspline = self.splines[0]
             vspline = self.splines[1]
-            mesh = RectangleMesh(Point(0.0,0.0),\
-                                 Point(uspline.nel,vspline.nel),\
-                                 uspline.nel,vspline.nel)
+            if(self.useRect):
+                cellType = CellType.Type_quadrilateral
+            else:
+                cellType = CellType.Type_triangle
+            mesh = UnitSquareMesh.create(uspline.nel,vspline.nel,cellType)
+            #mesh = RectangleMesh(Point(0.0,0.0),\
+            #                     Point(uspline.nel,vspline.nel),\
+            #                     uspline.nel,vspline.nel)
             x = mesh.coordinates()
             xbar = zeros((len(x),2))
             for i in range(0,len(x)):
-                uknotIndex = int(round(x[i,0]))
-                vknotIndex = int(round(x[i,1]))
+                #uknotIndex = int(round(x[i,0]))
+                #vknotIndex = int(round(x[i,1]))
+                uknotIndex = int(round(x[i,0]*float(uspline.nel)))
+                vknotIndex = int(round(x[i,1]*float(vspline.nel)))
                 xbar[i,0] = uspline.uniqueKnots[uknotIndex]
                 xbar[i,1] = vspline.uniqueKnots[vknotIndex]
             mesh.coordinates()[:] = xbar
@@ -276,15 +302,24 @@ class BSpline(AbstractScalarBasis):
             uspline = self.splines[0]
             vspline = self.splines[1]
             wspline = self.splines[2]
-            mesh = BoxMesh(Point(0.0,0.0,0.0),\
-                           Point(uspline.nel,vspline.nel,wspline.nel),\
-                           uspline.nel,vspline.nel,wspline.nel)
+            if(self.useRect):
+                cellType = CellType.Type_hexahedron
+            else:
+                cellType = CellType.Type_tetrahedron
+            mesh = UnitCubeMesh.create(uspline.nel,vspline.nel,wspline.nel,
+                                       cellType)
+            #mesh = BoxMesh(Point(0.0,0.0,0.0),\
+            #               Point(uspline.nel,vspline.nel,wspline.nel),\
+            #               uspline.nel,vspline.nel,wspline.nel)
             x = mesh.coordinates()
             xbar = zeros((len(x),3))
             for i in range(0,len(x)):
-                uknotIndex = int(round(x[i,0]))
-                vknotIndex = int(round(x[i,1]))
-                wknotIndex = int(round(x[i,2]))
+                #uknotIndex = int(round(x[i,0]))
+                #vknotIndex = int(round(x[i,1]))
+                #wknotIndex = int(round(x[i,2]))
+                uknotIndex = int(round(x[i,0]*float(uspline.nel)))
+                vknotIndex = int(round(x[i,1]*float(vspline.nel)))
+                wknotIndex = int(round(x[i,2]*float(wspline.nel)))
                 xbar[i,0] = uspline.uniqueKnots[uknotIndex]
                 xbar[i,1] = vspline.uniqueKnots[vknotIndex]
                 xbar[i,2] = wspline.uniqueKnots[wknotIndex]
@@ -301,7 +336,10 @@ class BSpline(AbstractScalarBasis):
         deg = 0
         for i in range(0,self.nvar):
             # for simplex elements; take max for rectangles
-            deg += self.splines[i].p
+            if(self.useRect):
+                deg = max(deg,self.splines[i].p)
+            else:
+                deg += self.splines[i].p
         return deg
 
     # return the dofs on a side (zero or one) perpendicular to a parametric
@@ -342,8 +380,8 @@ class BSpline(AbstractScalarBasis):
                 
 class ExplicitBSplineControlMesh(AbstractControlMesh):
 
-    def __init__(self,degrees,kvecs,extraDim=0):
-        self.scalarSpline = BSpline(degrees,kvecs)
+    def __init__(self,degrees,kvecs,extraDim=0,useRect=USE_RECT_ELEM_DEFAULT):
+        self.scalarSpline = BSpline(degrees,kvecs,useRect)
         # parametric = physical
         self.nvar = len(degrees)
         self.nsd = self.nvar + extraDim
