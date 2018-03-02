@@ -1,5 +1,6 @@
 from tIGAr.common import *
-#from numba import jit as numbaJit
+import bisect
+from numpy import searchsorted
 
 # helper function to generate a uniform open knot vector for degree p with
 # N elements.  If periodic, end knots are not repeated.  Otherwise, they
@@ -21,6 +22,78 @@ def uniformKnots(p,start,end,N,periodic=False):
 # reliably catch repeated knots
 KNOT_NEAR_EPS = 10.0*DOLFIN_EPS
 
+# cProfile identified basis function evaluation as a bottleneck in the
+# preprocessing, so i've moved it into an inline C++ routine, using
+# dolfin's extension module compilation
+basisFuncsCXXString = """
+namespace dolfin {
+
+int flatIndex(int i, int j, int N){
+  return i*N + j;
+}
+
+void basisFuncsInner(const Array<double> &ghostKnots,
+                     int nGhost,
+                     double u,
+                     int pl,
+                     int i,
+                     const Array<double> &ndu,
+                     const Array<double> &left,
+                     const Array<double> &right,
+                     const Array<double> &ders){
+
+    Array<double> *ghostKnotsp = &ghostKnots;
+    Array<double> *ndup = &ndu;
+    Array<double> *leftp = &left;
+    Array<double> *rightp = &right;
+    Array<double> *dersp = &ders;
+
+    int N = pl+1;
+    (*ndup)[flatIndex(0,0,N)] = 1.0;
+    for(int j=1; j<pl+1; j++){
+        (*leftp)[j] = u - (*ghostKnotsp)[i-j+nGhost];
+        (*rightp)[j] = (*ghostKnotsp)[i+j-1+nGhost]-u;
+        double saved = 0.0;
+        for(int r=0; r<j; r++){
+            (*ndup)[flatIndex(j,r,N)] = (*rightp)[r+1] + (*leftp)[j-r];
+            double temp = (*ndup)[flatIndex(r,j-1,N)]
+                          /(*ndup)[flatIndex(j,r,N)];
+            (*ndup)[flatIndex(r,j,N)] = saved + (*rightp)[r+1]*temp;
+            saved = (*leftp)[j-r]*temp;
+        } // r
+        (*ndup)[flatIndex(j,j,N)] = saved;
+    } // j
+    for(int j=0; j<pl+1; j++){
+        (*dersp)[j] = (*ndup)[flatIndex(j,pl,N)];
+    } // j
+}
+}
+"""
+
+basisFuncsCXXModule = compile_extension_module(basisFuncsCXXString,
+                                               cppargs='-g -O2')
+
+# function to eval B-spline basis functions
+def basisFuncsInner(ghostKnots,nGhost,u,pl,i,ndu,left,right,ders):
+
+    basisFuncsCXXModule.basisFuncsInner(ghostKnots,nGhost,u,pl,i,
+                                        ndu.flatten(),
+                                        left,right,ders)
+    #ndu[0,0] = 1.0
+    #for j in range(1,pl+1):
+    #    left[j] = u - ghostKnots[i-j+nGhost]
+    #    right[j] = ghostKnots[i+j-1+nGhost]-u
+    #    saved = 0.0
+    #    for r in range(0,j):
+    #        ndu[j,r] = right[r+1] + left[j-r]
+    #        temp = ndu[r,j-1]/ndu[j,r]
+    #        ndu[r,j] = saved + right[r+1]*temp
+    #        saved = left[j-r]*temp
+    #    ndu[j,j] = saved
+    #for j in range(0,pl+1):
+    #    ders[j] = ndu[j,pl]
+
+
 # scalar univariate b-spline; this is used construct tensor products, with a
 # univariate "tensor product" as a special case; therefore this does not
 # implement the AbstractScalarBasis interface, even though you might think
@@ -30,9 +103,9 @@ class BSpline1(object):
     # create from degree, knot data
     def __init__(self,p,knots):
         self.p = p
-        self.knots = knots
+        self.knots = array(knots)
         self.computeNel()
-
+        
         # needed for mesh generation
         self.uniqueKnots = zeros(self.nel+1)
         self.multiplicities = zeros(self.nel+1,dtype=INDEX_TYPE)
@@ -45,6 +118,14 @@ class BSpline1(object):
                 self.uniqueKnots[ct] = knots[i]
             lastKnot = knots[i]
             self.multiplicities[ct] += 1
+        self.ncp = self.computeNcp()
+
+        # knot array with ghosts, for optimized access
+        self.nGhost = self.p+1
+        self.ghostKnots = []
+        for i in range(-self.nGhost,len(self.knots)+self.nGhost):
+            self.ghostKnots += [self.getKnot(i),]
+        self.ghostKnots = array(self.ghostKnots)
 
     # if any non-end knot is repeated more than p time, then the B-spline
     # is discontinuous
@@ -84,28 +165,28 @@ class BSpline1(object):
         return retval
 
         
-    def getNcp(self):
+    def computeNcp(self):
         return len(self.knots) - self.multiplicities[0]
+
+    def getNcp(self):
+        return self.ncp
 
     # given a parameter, return the knot span
     def getKnotSpan(self,u):
 
-        # TODO: binary search
-
         # placeholder linear search
-        #if(u<self.knots[0]-DOLFIN_EPS or u>self.knots[-1]+DOLFIN_EPS):
-        #    print u, self.knots[0], self.knots[-1]
-        #    return -1
-        span = 0
+        #span = 0
+        #nspans = len(self.knots)-1
+        #for i in range(0,nspans):
+        #    span = i
+        #    if(u<self.knots[i+1]+DOLFIN_EPS):
+        #        break
+
+        # from docs: should be index of "rightmost value less than x"
         nspans = len(self.knots)-1
-        for i in range(0,nspans):
-            span = i
-            if(u<self.knots[i+1]+DOLFIN_EPS):
-                break
-        #if(span < self.p):
-        #    span = self.p
-        #if(span > nspans-self.p-1):
-        #    span = nspans-self.p-1 
+        #span = bisect.bisect_left(self.knots,u)-1
+        span = searchsorted(self.knots,u)-1
+        
         if(span < self.multiplicities[0]-1):
             span = self.multiplicities[0]-1
         if(span > nspans-(self.multiplicities[-1]-1)-1):
@@ -117,10 +198,6 @@ class BSpline1(object):
     def getNodes(self,u):
         nodes = []
         knotSpan = self.getKnotSpan(u)
-        #for i in range(knotSpan-self.p,knotSpan+1):
-        #    if(i<self.getNcp() and i>=0):
-        #        nodes += [i,]
-        #start = knotSpan-self.multiplicities[0]+1
         for i in range(knotSpan-self.p,knotSpan+1):
             nodes += [i % self.getNcp(),]
         return nodes
@@ -135,20 +212,23 @@ class BSpline1(object):
         left = zeros(pl+1)
         right = zeros(pl+1)
         ders = zeros(pl+1)
+
+        basisFuncsInner(self.ghostKnots,self.nGhost,u,
+                        pl,i,ndu,left,right,ders)
         
-        ndu[0,0] = 1.0
-        for j in range(1,pl+1):
-            left[j] = u - self.getKnot(i-j) #u_knotl[i-j]
-            right[j] = self.getKnot(i+j-1)-u #u_knotl[i+j-1]-u
-            saved = 0.0
-            for r in range(0,j):
-                ndu[j,r] = right[r+1] + left[j-r]
-                temp = ndu[r,j-1]/ndu[j,r]
-                ndu[r,j] = saved + right[r+1]*temp
-                saved = left[j-r]*temp
-            ndu[j,j] = saved
-        for j in range(0,pl+1):
-            ders[j] = ndu[j,pl]
+        #ndu[0,0] = 1.0
+        #for j in range(1,pl+1):
+        #    left[j] = u - self.getKnot(i-j) #u_knotl[i-j]
+        #    right[j] = self.getKnot(i+j-1)-u #u_knotl[i+j-1]-u
+        #    saved = 0.0
+        #    for r in range(0,j):
+        #        ndu[j,r] = right[r+1] + left[j-r]
+        #        temp = ndu[r,j-1]/ndu[j,r]
+        #        ndu[r,j] = saved + right[r+1]*temp
+        #        saved = left[j-r]*temp
+        #    ndu[j,j] = saved
+        #for j in range(0,pl+1):
+        #    ders[j] = ndu[j,pl]
 
         return ders
 
@@ -186,6 +266,8 @@ class BSpline(AbstractScalarBasis):
             self.splines += [BSpline1(degrees[i],kvecs[i]),]
         self.useRect = useRect
 
+        self.ncp = self.computeNcp()
+        
     #def getParametricDimension(self):
     #    return self.nvar
 
@@ -326,11 +408,14 @@ class BSpline(AbstractScalarBasis):
             mesh.coordinates()[:] = xbar
             return mesh
         
-    def getNcp(self):
+    def computeNcp(self):
         prod = 1
         for i in range(0,self.nvar):
             prod *= self.splines[i].getNcp()
         return prod
+
+    def getNcp(self):
+        return self.ncp
 
     def getDegree(self):
         deg = 0

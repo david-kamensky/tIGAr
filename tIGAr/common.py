@@ -19,7 +19,7 @@ from dolfin import MPI, mpi_comm_world
 if(parameters.linear_algebra_backend != 'PETSc'):
     print("ERROR: tIGAr requires PETSc.")
     exit()
-
+    
 mycomm = mpi_comm_world()
 mpisize = MPI.size(mycomm)
 mpirank = MPI.rank(mycomm)
@@ -297,6 +297,7 @@ class AbstractExtractionGenerator(object):
         # write HDF file
         f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,"w")
         f.write(self.mesh,EXTRACTION_H5_MESH_NAME)
+
         for i in range(0,self.nsd+1):
             f.write(self.cpFuncs[i],EXTRACTION_H5_CONTROL_FUNC_NAME(i))
         f.close()
@@ -437,7 +438,12 @@ class ExtractedSpline(object):
         f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,'r')
         if(mesh==None):
             self.mesh = Mesh()
+
+            # NOTE: behaves erratically in parallel for quad/hex meshes
+            # in 2017.2; hopefully will be fixed soon (see dolfin
+            # issue #1000).  
             f.read(self.mesh,EXTRACTION_H5_MESH_NAME,True)
+
         else:
             self.mesh = mesh
 
