@@ -1,3 +1,9 @@
+"""
+The ``common`` module contains basic definitions of abstractions for 
+generating extraction data and importing it again for use in analysis.  Upon
+importing it, a number of setup steps are carried out (e.g., initializing MPI).
+"""
+
 from dolfin import *
 import petsc4py, sys
 petsc4py.init(sys.argv)
@@ -54,6 +60,11 @@ USE_RECT_ELEM_DEFAULT = True
 # helper function to generate an identity permutation IS 
 # given an ownership range
 def generateIdentityPermutation(ownRange):
+
+    """
+    Returns a PETSc index set corresponding to the ownership range.
+    """
+    
     iStart = ownRange[0]
     iEnd = ownRange[1]
     localSize = iEnd - iStart
@@ -65,18 +76,41 @@ def generateIdentityPermutation(ownRange):
     return retval
 
 class AbstractExtractionGenerator(object):
+
+    """
+    Abstract class representing the minimal set of functions needed to write
+    extraction operators for a spline.
+    """
+
     __metaclass__ = abc.ABCMeta
 
     def __init__(self,*args):
+
+        """
+        Arguments in ``*args`` are passed as a tuple to 
+        ``self.customSetup()``.  Appropriate arguments vary by subclass.
+        """
+        
         self.customSetup(args)
         self.genericSetup()
         
     # what type of element (CG or DG) to extract to
     # (override in subclass for non-default behavior)
     def useDG(self):
+
+        """
+        Returns a Boolean, indicating whether or not to use DG elements 
+        in extraction.
+        """
+        
         return USE_DG_DEFAULT
     
     def extractionElement(self):
+
+        """
+        Returns a string indicating what type of FE to use in extraction.
+        """
+        
         if(self.useDG()):
             return "DG"
         else:
@@ -341,6 +375,20 @@ class AbstractExtractionGenerator(object):
 # interpolated onto linears for plotting
 class SplineDisplacementExpression(Expression):
 
+    """
+    An expression that can be used to evaluate ``F`` plus an optional 
+    displacement at arbitrary points.  To be usable, it must have the 
+    following attributes assigned: 
+
+    (1) ``self.spline``: an instance of ``ExtractedSpline`` to which the 
+    displacement applies. 
+
+    (2) ``self.functionList:`` a list of scalar functions in the 
+    function space for ``spline``'s control mesh, which act as components of 
+    the displacement. If ``functionList`` contains too few entries (including 
+    zero entries), the missing entries are assumed to be zero.
+    """
+    
     # needs attributes:
     # - spline (ExtractedSpline)
     # - functionList (list of SCALAR Functions)
@@ -379,6 +427,14 @@ class SplineDisplacementExpression(Expression):
 
 # compose with deformation
 class tIGArExpression(Expression):
+
+    """
+    A subclass of ``Expression`` which composes its attribute ``self.expr``
+    (also an ``Expression``) with the deformation ``F`` given by its attribute 
+    ``self.cpFuncs``, which is a list of ``Function`` objects, specifying the 
+    components of ``F``.
+    """
+
     # using eval_cell allows us to avoid having to search for which cell
     # x is in; also x need not be in a unique cell, which is nice for
     # splines that do not have a single coordinate chart
@@ -399,11 +455,21 @@ class tIGArExpression(Expression):
 # could represent any sort of spline that is extractable
 class ExtractedSpline(object):
 
-    # generate from extraction data in directory dirname
-    # optionally take a mesh argument, so that function spaces can be
-    # established on the same mesh as an existing spline object for
-    # facilitating segregated solver schemes
+    """
+    A class representing an extracted spline.
+    """
+    
+
     def __init__(self,dirname,quadDeg,mesh=None):
+
+        """
+        Generates instance from extraction data in directory dirname. 
+        Optionally takes a mesh argument, so that function spaces can be
+        established on the same mesh as an existing spline object for
+        facilitating segregated solver schemes.  (Splines common to one
+        set of extraction data are always treated as a monolothic mixed
+        element.)
+        """
 
         self.quadDeg = quadDeg
 
@@ -597,12 +663,22 @@ class ExtractedSpline(object):
         
         self.V_displacement = FunctionSpace(self.mesh,self.VE_displacement)
         self.V_linear = FunctionSpace(self.mesh,self.VE_linear)
+
         
-    # given a list of scalar functions, get a disp. field from mesh coordinates
-    # to control + functions in physical space, interpolated on linear elements
-    # for plotting w/out discontinuities on cut-up meshes.
-    # default functionList = [] just interpolates control functions.
     def interpolateAsDisplacement(self,functionList=[]):
+
+        """
+        Given a list of scalar functions, get a displacement field from 
+        mesh coordinates to control + functions in physical space, 
+        interpolated on linear elements for plotting without discontinuities 
+        on cut-up meshes. Default argument of ``functionList=[]`` 
+        just interpolates the control functions.  If there are fewer elements
+        in ``functionList`` than there are control functions, then the missing
+        functions are assumed to be zero.
+
+        NOTE: Currently only works with extraction to simplicial elements.
+        """
+        
         #expr = SplineDisplacementExpression(degree=self.quadDeg)
         expr = SplineDisplacementExpression\
                (element=self.VE_displacement)
@@ -617,15 +693,33 @@ class ExtractedSpline(object):
     # in the Cartesian coordinates of the physical configuration, NOT in the
     # local coordinate chart w.r.t. which derivatives are taken by FEniCS
     def grad(self,f,F=None):
+        """ 
+        Cartesian gradient of ``f`` w.r.t. physical coordinates.  
+        Optional argument ``F`` can be used to take the gradient assuming 
+        a different mapping from
+        parametric to physical space.  (Default is ``self.F``.)
+        """
         if(F==None):
             F = self.F
         return cartesianGrad(f,F)
     def div(self,f,F=None):
+        """ 
+        Cartesian divergence of ``f`` w.r.t. physical coordinates.  
+        Optional argument ``F``
+        can be used to take the gradient assuming a different mapping from
+        parametric to physical space.  (Default is ``self.F``.)
+        """
         if(F==None):
             F = self.F
         return cartesianDiv(f,F)
     # only applies in 3D, to vector-valued f
     def curl(self,f,F=None):
+        """ 
+        Cartesian curl w.r.t. physical coordinates.  Only applies in 3D, to
+        vector-valued ``f``.  Optional argument ``F``
+        can be used to take the gradient assuming a different mapping from
+        parametric to physical space.  (Default is ``self.F``.)
+        """
         if(F==None):
             F = self.F
         return cartesianCurl(f,F)
@@ -634,6 +728,10 @@ class ExtractedSpline(object):
     # just a wrapper for FEniCS grad(), but included to allow for writing
     # clear, unambiguous scripts
     def parametricGrad(self,f):
+        """
+        Gradient of ``f`` w.r.t. parametric coordinates.  (Equivalent to UFL 
+        ``grad()``, but introduced to avoid confusion with ``self.grad()``.)
+        """
         return grad(f)
     
     # curvilinear variants; if f is only a regular tensor, will create a
@@ -641,19 +739,42 @@ class ExtractedSpline(object):
     # generated by mapping self.F (into Cartesian space) if no metric is
     # supplied via f.
     def GRAD(self,f):
+        """
+        Covariant derivative of a ``CurvilinearTensor``, ``f``, taken w.r.t. 
+        parametric coordinates, assuming that components
+        of ``f`` are also given in this coordinate system.  If a regular tensor
+        is passed for ``f``, a ``CurvilinearTensor`` will be created with all 
+        lowered indices.
+        """
         if(not isinstance(f,CurvilinearTensor)):
             ff = CurvilinearTensor(f,self.g)
         else:
             ff = f
         return curvilinearGrad(ff)
-    def DIV(self,f,g=None):
+    def DIV(self,f):
+        """
+        Curvilinear divergence operator corresponding to ``self.GRAD()``. 
+        Contracts new lowered index from ``GRAD`` with last raised 
+        index of ``f``.
+        If a regular tensor is passed for ``f``, a ``CurvilinearTensor``
+        will be created with all raised indices.
+        """
         if(not isinstance(f,CurvilinearTensor)):
-            ff = CurvilinearTensor(f,self.g)
+            ff = CurvilinearTensor(f,self.g).sharp()
         else:
             ff = f
         return curvilinearDiv(ff)
     
     def spatialExpression(self,expr):
+        """
+        Converts string ``expr`` into an ``Expression``, 
+        treating the coordinates ``'x[i]'`` in ``expr`` as 
+        spatial coordinates.  
+        (Using the standard ``Expression`` constructor, these would be treated 
+        as parametric coordinates.)
+
+        NOTE: Only works when extracting to simplicial elements.
+        """
         retval = tIGArExpression(degree=self.quadDeg)
         retval.expr = Expression(expr,degree=self.quadDeg)
         retval.nsd = self.nsd
@@ -661,18 +782,43 @@ class ExtractedSpline(object):
         return retval
 
     def parametricExpression(self,expr):
+        """
+        Create an ``Expression`` from a string, ``expr``, interpreting the
+        coordinates ``'x[i]'`` in ``expr`` as parametric coordinates.
+        Uses quadrature degree of spline object for interpolation degree.
+        """
         return Expression(expr,degree=self.quadDeg)
 
     def parametricCoordinates(self):
+        """
+        Wrapper for ``SpatialCoordiantes()`` to avoid confusion, since
+        FEniCS's spatial coordinates are used in tIGAr as parametric 
+        coordinates.  
+        """
         return SpatialCoordinate(self.mesh)
 
     def spatialCoordinates(self):
+        """
+        Returns the mapping ``self.F``, which gives the spatial coordinates
+        of a parametric point.
+        """
         return self.F
     
     def rationalize(self,u):
+        """
+        Divides its argument ``u`` by the weighting function of the spline's
+        control mesh.
+        """
         return u/(self.cpFuncs[self.nsd])
 
     def assembleLinearSystem(self,lhsForm,rhsForm,applyBCs=True):
+        """
+        Assembles a linear system corresponding the LHS form ``lhsForm`` and
+        RHS form ``rhsForm``.  The optional argument ``applyBCs`` is a 
+        Boolean indicating whether or not to apply the spline's 
+        homogeneous Dirichlet BCs.
+        """
+        
         A = PETScMatrix()
         b = PETScVector()
 
