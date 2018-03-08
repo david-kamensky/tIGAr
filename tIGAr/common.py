@@ -1,5 +1,7 @@
 """
-The ``common`` module contains basic definitions of abstractions for 
+The ``common`` module 
+---------------------
+contains basic definitions of abstractions for 
 generating extraction data and importing it again for use in analysis.  Upon
 importing it, a number of setup steps are carried out (e.g., initializing MPI).
 """
@@ -456,19 +458,22 @@ class tIGArExpression(Expression):
 class ExtractedSpline(object):
 
     """
-    A class representing an extracted spline.
+    A class representing an extracted spline.  The idea is that all splines
+    look the same after extraction, so there is no need for a proliferation
+    of different classes to cover NURBS, T-splines, etc. (as there is for
+    extraction generators).  
     """
-    
 
     def __init__(self,dirname,quadDeg,mesh=None):
 
         """
-        Generates instance from extraction data in directory dirname. 
-        Optionally takes a mesh argument, so that function spaces can be
+        Generates instance from extraction data in directory ``dirname``. 
+        Optionally takes a ``mesh`` argument, so that function spaces can be
         established on the same mesh as an existing spline object for
         facilitating segregated solver schemes.  (Splines common to one
         set of extraction data are always treated as a monolothic mixed
-        element.)
+        function space.)  Everything to do with the spline is integrated 
+        using a quadrature rule of degree ``quadDeg``.
         """
 
         self.quadDeg = quadDeg
@@ -860,6 +865,18 @@ class ExtractedSpline(object):
         return (MTAM,MTb)
 
     def solveLinearSystem(self,MTAM,MTb,u):
+        """
+        Solves a linear system of the form
+
+        ``MTAM*MTU = MTb``
+
+        where ``MTAM`` is the IGA LHS, ``MTU`` is the vector of IGA unknowns
+        (in the homogeneous coordinate representation, if rational splines
+        are being used), and ``MTb`` is the IGA RHS.  The FE representation 
+        of the solution is then the ``Function`` ``u`` which has a vector 
+        of coefficients given by ``MT*MTU``.
+        """
+        
         U = u.vector()
         MTU = (self.MT)*U
         if(self.linearSolver == None):
@@ -872,6 +889,12 @@ class ExtractedSpline(object):
 
     
     def solveLinearVariationalProblem(self,residualForm,u,applyBCs=True):
+        """
+        Solves a linear variational problem with residual ``residualForm'',
+        putting the solution in the ``Function`` ``u``.  Homogeneous 
+        Dirichlet BCs from ``self`` can be optionally applied, based on the
+        Boolean parameter ``applyBCs``.
+        """
         lhsForm = lhs(residualForm)
         rhsForm = rhs(residualForm)
 
@@ -888,12 +911,22 @@ class ExtractedSpline(object):
                          maxIters=20,\
                          relativeTolerance=1e-5,\
                          linearSolver=None):
+        """
+        Sets some solver options for the ``ExtractedSpline`` instance, to be
+        used in ``self.solve*VariationalProblem()``.
+        """
         self.maxIters = maxIters
         self.relativeTolerance = relativeTolerance
         self.linearSolver = linearSolver
 
     # couldn't figure out how to get subclassing NonlinearProblem to work...
     def solveNonlinearVariationalProblem(self,residualForm,J,u):
+        """
+        Solves a nonlinear variational problem with residual given by 
+        ``residualForm``.  ``J`` is the functional derivative of 
+        the residual w.r.t. the solution, ``u``, or some user-defined
+        approximation thereof.
+        """
         converged = False
         for i in range(0,self.maxIters):
             MTAM,MTb = self.assembleLinearSystem(J,residualForm)
@@ -919,6 +952,10 @@ class ExtractedSpline(object):
 
     # project a scalar onto linears for plotting
     def projectScalarOntoLinears(self,toProject):
+        """
+        L2 projection of some UFL object ``toProject`` onto a space of linear,
+        scalar FE functions (typically used for plotting).
+        """
         u = TrialFunction(self.V_linear)
         v = TestFunction(self.V_linear)
         # don't bother w/ change of variables in integral
@@ -933,6 +970,12 @@ class ExtractedSpline(object):
             
     # project something onto the solution space; ignore bcs by default
     def project(self,toProject,applyBCs=False):
+        """
+        L2 projection of some UFL object ``toProject`` onto the 
+        ``ExtractedSpline`` object's solution space.  Can optionally apply
+        homogeneous Dirichlet BCs with the Boolean parameter 
+        ``applyBCs``.  By default, no BCs are applied in projection.
+        """
         u = TrialFunction(self.V)
         v = TestFunction(self.V)
         u = self.rationalize(u)
@@ -943,23 +986,38 @@ class ExtractedSpline(object):
         retval = self.rationalize(retval)
         return retval
         
-# spline whose coordinate space can be represented using a single coordinate
-# chart, so coordinates provide a unique set of basis functions; this applies
-# to single-patch B-splines, T-splines, NURBS, etc.
 class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
+
+    """
+    This abstraction epresents a spline whose parametric 
+    coordinate system consists of a 
+    using a single coordinate chart, so coordinates provide a unique set 
+    of basis functions; this applies to single-patch B-splines, T-splines, 
+    NURBS, etc., and, with a little creativity, can be stretched to cover
+    multi-patch constructions.
+    """
     
-    # given a parametric point x, return a list of the form
-    #
-    #   [[index0, N_index0(x)], [index1,N_index1(x)], ... ]
-    #
-    # where N_i is the i-th basis function of the polynomial spline space
-    # (NOT of the rational space)
     @abc.abstractmethod
     def getNodesAndEvals(self,x,field):
+        """
+        Given a parametric point ``x``, return a list of the form
+        
+        ``[[index0, N_index0(x)], [index1,N_index1(x)], ... ]``
+        
+        where ``N_i`` is the ``i``-th basis function of the scalar polynomial 
+        spline space (NOT of the rational space) corresponding to a given
+        ``field``.
+        """
         return
 
     # return a matrix M for extraction
     def generateM_control(self):
+        """
+        Generates the extraction matrix for the single scalar spline space
+        used to represent all homogeneous components of the mapping ``F``
+        from parametric to physical space.
+        """
+        
         func = Function(self.V_control)
         Istart, Iend = as_backend_type(func.vector()).vec().getOwnershipRange()
         nLocalNodes = Iend - Istart
@@ -1006,7 +1064,11 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         return PETScMatrix(MPETSc)
 
     def generateM(self):
-
+        """
+        Generates the extraction matrix for the mixed function space of
+        all unkown scalar fields.
+        """
+        
         func = Function(self.V)
         Istart, Iend = as_backend_type(func.vector()).vec().getOwnershipRange()
         nLocalNodes = Iend - Istart
@@ -1068,6 +1130,13 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
     # FE mesh they overlap.  this will (hopefully) reduce communication
     # cost in the matrix--matrix multiplies
     def generatePermutation(self):
+
+        """
+        Generates a permutation of the IGA degrees of freedom that tries to
+        ensure overlap of their parallel partitioning with that of the FE
+        degrees of freedom, which are partitioned automatically based on the
+        FE mesh.
+        """
         
         func = Function(self.V)
         Istart, Iend = as_backend_type(func.vector()).vec().getOwnershipRange()
@@ -1150,32 +1219,65 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
 # which we assume that each point has unique coordinates.  
 class AbstractScalarBasis(object):
 
+    """
+    Abstraction defining the behavior of a collection of scalar basis 
+    functions, defined on a manifold for which each point has unique 
+    coordinates.
+    """
+    
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def getNodesAndEvals(self,xi):
+        """
+        Given a parametric point ``xi``, return a list of the form
+        
+        ``[[index0, N_index0(xi)], [index1,N_index1(xi)], ... ]``
+        
+        where ``N_i`` is the ``i``-th basis function.
+        """
         return
 
     @abc.abstractmethod
     def getNcp(self):
+        """
+        Returns the total number of basis functions.
+        """
         return
 
     @abc.abstractmethod
     def generateMesh(self):
+        """
+        Generates and returns an FE mesh sufficient for extracting this spline
+        basis.
+        """
         return
 
     @abc.abstractmethod
     def getDegree(self):
+        """
+        Returns a polynomial degree for FEs that is sufficient for extracting 
+        this spline basis.
+        """
         return
 
     #@abc.abstractmethod
     # assume DG unless this is overridden by a subclass (as DG will work even
     # if CG is okay (once they fix DG for quads/hexes at least...))
     def needsDG(self):
+        """
+        Returns a Boolean indicating whether or not DG elements are needed
+        to represent this spline space (i.e., whether or not the basis is
+        discontinuous).
+        """
         return True
 
     @abc.abstractmethod
     def useRectangularElements(self):
+        """
+        Returns a Boolean indicating whether or not rectangular (i.e., quad
+        or hex) elements should be used for extraction of this basis.
+        """
         return
     
     #@abc.abstractmethod
@@ -1187,42 +1289,76 @@ class AbstractScalarBasis(object):
     # a finite element node (i.e, the maximum number of nonzero
     # entries in a row of M corrsponding to that FE basis function.)
     def getPrealloc(self):
+        """
+        Returns some upper bound on the number of nonzero entries per row
+        of the extraction matrix for this spline space.  If this can be
+        easily estimated for a specific spline type, then this method 
+        should almost certainly be overriden by that subclass for memory
+        efficiency, as the default value implemented in the abstract class is
+        overkill.
+        """
         return DEFAULT_PREALLOC
     
 # interface needed for a control mesh with a coordinate chart
 class AbstractControlMesh(object):
-
+    """
+    Abstraction representing the behavior of a control mesh, i.e., a mapping
+    from parametric to physical space.
+    """
+    
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def getHomogeneousCoordinate(self,node,direction):
+        """
+        Returns the ``direction``-th homogeneous component of the control 
+        point with index ``node``.
+        """
         return
 
     @abc.abstractmethod
     def getScalarSpline(self):
+        """
+        Returns the instance of ``AbstractScalarBasis`` that represents
+        each homogeneous component of the control mapping.
+        """
         return
 
     @abc.abstractmethod
     def getNsd(self):
+        """
+        Returns the dimension of physical space.
+        """
         return
 
-# interface for a general multi-field spline.  The reason that this is
-# a special case of AbstractCoordinateChartSpline (instead of being redundant
-# in light of AbstractExtractionGenerator) is that it uses a collection of
-# AbstractScalarBasis objects, whose getNodesAndEvals() methods require
-# parametric coordinates to correspond to unique points.
+
 class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
+
+    """
+    Interface for a general multi-field spline.  The reason this is
+    a special case of ``AbstractCoordinateChartSpline`` 
+    (instead of being redundant in light of AbstractExtractionGenerator) 
+    is that it uses a collection of ``AbstractScalarBasis`` objects, whose 
+    ``getNodesAndEvals()`` methods require parametric coordinates 
+    to correspond to unique points.
+    """
 
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def getControlMesh(self):
+        """
+        Returns some object implementing ``AbstractControlMesh``, that
+        represents this spline's control mesh.
+        """
         return
 
-    # this is specifically for fields, whereas getScalarSpline() allows for
-    # passing -1 to get the scalar spline associated with the control mesh
     @abc.abstractmethod
     def getFieldSpline(self,field):
+        """
+        Returns the ``field``-th unknown scalar field's 
+        ``AbstractScalarBasis``.
+        """
         return
 
     # overrides method inherited from AbstractExtractionGenerator, using
@@ -1241,15 +1377,26 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
         return retval
     
     def getScalarSpline(self,field):
+        """
+        Returns the ``field``-th unknown scalar field's \
+        ``AbstractScalarBasis``, or, if ``field==-1``, the 
+        basis for the scalar space of the control mesh.
+        """
         if(field==-1):
             return self.getControlMesh().getScalarSpline()
         else:
             return self.getFieldSpline(field)
 
     def getNsd(self):
+        """
+        Returns the dimension of physical space.
+        """
         return self.getControlMesh().getNsd()
 
     def getHomogeneousCoordinate(self,node,direction):
+        """
+        Invokes the synonymous method of its control mesh.
+        """
         return self.getControlMesh()\
             .getHomogeneousCoordinate(node,direction)
 
@@ -1260,9 +1407,16 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
         return self.getScalarSpline(-1).generateMesh()
 
     def getDegree(self,field):
+        """
+        Returns the polynomial degree needed to extract the ``field``-th
+        unknown scalar field.
+        """
         return self.getScalarSpline(field).getDegree()
 
     def getNcp(self,field):
+        """
+        Returns the number of degrees of freedom for a given ``field``.
+        """
         return self.getScalarSpline(field).getNcp()
 
     def useDG(self):
@@ -1276,9 +1430,21 @@ class AbstractMultiFieldSpline(AbstractCoordinateChartSpline):
 # they need to be divided through by weight to get an iso-parametric
 # formulation.
 class EqualOrderSpline(AbstractMultiFieldSpline):
-
+    """
+    A concrete subclass of ``AbstractMultiFieldSpline`` to cover the common
+    case of multi-field splines in which all unknown scalar fields are 
+    discretized using the same ``AbstractScalarBasis``.
+    """
+    
     # args: numFields, controlMesh
     def customSetup(self,args):
+        """
+        ``args = (numFields,controlMesh)``, where ``numFields`` is the 
+        number of unknown scalar fields and ``controlMesh`` is an
+        ``AbstractControlMesh`` providing the mapping from parametric to
+        physical space and, in this case, the scalar basis to be used for
+        all unknown scalar fields.
+        """
         self.numFields = args[0]
         self.controlMesh = args[1]
     def getNFields(self):
@@ -1288,9 +1454,19 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
     def getFieldSpline(self,field):
         return self.getScalarSpline(-1)
 
-    # assume argument subdomain is an instance of SubDomain and use its
-    # inside() method to identify control points in that subdomain
     def addZeroDofsByLocation(self, subdomain, field):
+        """
+        Because, in the equal-order case, there is a one-to-one
+        correspondence between the DoFs of the scalar fields and the
+        control points of the geometrical mapping, one may, in some cases, 
+        want to assign boundary conditions to the DoFs of the scalar fields
+        based on the locations of their corresponding control points.  
+
+        This method assigns homogeneous Dirichlet BCs to DoFs of a given
+        ``field`` if the corresponding control points fall within 
+        ``subdomain``, which is an instance of ``SubDomain``.
+        """
+        
         # this is prior to the permutation
         Istart, Iend = self.M_control.mat().getOwnershipRangeColumn()
         nsd = self.getNsd()
@@ -1312,8 +1488,19 @@ class EqualOrderSpline(AbstractMultiFieldSpline):
 # a concrete case with a list of distinct scalar splines
 class FieldListSpline(AbstractMultiFieldSpline):
 
+    """
+    A concrete case of a multi-field spline that is constructed from a given
+    list of ``AbstractScalarBasis`` objects.  
+    """
+    
     # args: controlMesh, fields
     def customSetup(self,args):
+        """
+        ``args = (controlMesh,fields)``, where ``controlMesh`` is an
+        ``AbstractControlMesh`` providing the mapping from parametric to
+        physical space and ``fields`` is a list of ``AbstractScalarBasis``
+        objects for the unknown scalar fields.
+        """
         self.controlMesh = args[0]
         self.fields = args[1]
     def getNFields(self):

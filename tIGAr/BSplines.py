@@ -1,11 +1,22 @@
+"""
+The ``BSplines`` module 
+-----------------------
+provides a self-contained implementation of B-splines
+that can be used to generate simple sets of extraction data for 
+rectangular domains.
+"""
+
 from tIGAr.common import *
 import bisect
 from numpy import searchsorted
 
-# helper function to generate a uniform open knot vector for degree p with
-# N elements.  If periodic, end knots are not repeated.  Otherwise, they
-# are repeated p+1 times for an open knot vector
+
 def uniformKnots(p,start,end,N,periodic=False):
+    """
+    Helper function to generate a uniform open knot vector of degree ``p`` with
+    ``N`` elements.  If ``periodic``, end knots are not repeated.  
+    Otherwise, they are repeated ``p+1`` times for an open knot vector.
+    """
     retval = []
     if(not periodic):
         for i in range(0,p):
@@ -73,9 +84,9 @@ void basisFuncsInner(const Array<double> &ghostKnots,
 basisFuncsCXXModule = compile_extension_module(basisFuncsCXXString,
                                                cppargs='-g -O2')
 
-# function to eval B-spline basis functions
+# function to eval B-spline basis functions (for internal use)
 def basisFuncsInner(ghostKnots,nGhost,u,pl,i,ndu,left,right,ders):
-
+    
     basisFuncsCXXModule.basisFuncsInner(ghostKnots,nGhost,u,pl,i,
                                         ndu.flatten(),
                                         left,right,ders)
@@ -94,14 +105,20 @@ def basisFuncsInner(ghostKnots,nGhost,u,pl,i,ndu,left,right,ders):
     #    ders[j] = ndu[j,pl]
 
 
-# scalar univariate b-spline; this is used construct tensor products, with a
-# univariate "tensor product" as a special case; therefore this does not
-# implement the AbstractScalarBasis interface, even though you might think
-# that it should.
 class BSpline1(object):
-
+    """
+    Scalar univariate B-spline; this is used construct tensor products, with a
+    univariate "tensor product" as a special case; therefore this does not
+    implement the ``AbstractScalarBasis`` interface, even though you might
+    initially think that it should.
+    """
+    
     # create from degree, knot data
     def __init__(self,p,knots):
+        """
+        Creates a univariate B-spline from a degree, ``p``, and an ordered
+        collection of ``knots``.
+        """
         self.p = p
         self.knots = array(knots)
         self.computeNel()
@@ -130,24 +147,34 @@ class BSpline1(object):
     # if any non-end knot is repeated more than p time, then the B-spline
     # is discontinuous
     def isDiscontinuous(self):
+        """
+        Returns a Boolean indicating whether or not the B-spline is 
+        discontinuous.  
+        """
         for i in range(1,len(self.uniqueKnots)-1):
             if(self.multiplicities[i] > self.p):
                 return True
         return False
         
-    # get the number of non-degenerate knot spans
     def computeNel(self):
+        """
+        Returns the number of non-degenerate knot spans.
+        """
         self.nel = 0
         for i in range(1,len(self.knots)):
             if(not near(self.knots[i],self.knots[i-1],\
                         eps=KNOT_NEAR_EPS)):
                 self.nel += 1
 
-    # return a knot, possibly with an out-of-range index, in which case
-    # ghost knots are conjured by looking at the other end of the vector.
-    # assume that the first and last unique knots are duplicates with the same
-    # multiplicity
+
     def getKnot(self,i):
+        """
+        return a knot, with a (possibly) out-of-range index ``i``.  If ``i``
+        is out of range, ghost knots are conjured by looking at the other 
+        end of the vector.
+        Assumes that the first and last unique knots are duplicates with the
+        same multiplicity.
+        """
         if(i<0):
             ii = len(self.knots) - self.multiplicities[-1] + i
             return self.knots[0] - (self.knots[-1] - self.knots[ii])
@@ -158,6 +185,10 @@ class BSpline1(object):
             return self.knots[i]
                 
     def greville(self,i):
+        """
+        Returns the Greville parameter associated with the 
+        ``i``-th control point.
+        """
         retval = 0.0
         for j in range(i,i+self.p):
             retval += self.getKnot(j+1)
@@ -166,14 +197,23 @@ class BSpline1(object):
 
         
     def computeNcp(self):
+        """
+        Computes and returns the number of control points.
+        """
         return len(self.knots) - self.multiplicities[0]
 
     def getNcp(self):
+        """
+        Returns the number of control points.
+        """
         return self.ncp
 
-    # given a parameter, return the knot span
     def getKnotSpan(self,u):
-
+        """
+        Given parameter ``u``, return the index of the knot span in which
+        ``u`` falls.  (Numbering includes degenerate knot spans.)
+        """
+        
         # placeholder linear search
         #span = 0
         #nspans = len(self.knots)-1
@@ -193,18 +233,22 @@ class BSpline1(object):
             span = nspans-(self.multiplicities[-1]-1)-1
         return span
 
-    # given a param u, return a list of indexes of IGA basis functions whose
-    # supports contain u
     def getNodes(self,u):
+        """
+        Given a parameter ``u``, return a list of the indices of B-spline
+        basis functions whose supports contain ``u``.
+        """
         nodes = []
         knotSpan = self.getKnotSpan(u)
         for i in range(knotSpan-self.p,knotSpan+1):
             nodes += [i % self.getNcp(),]
         return nodes
 
-    # the index knotSpan is the index of a knot span (including zero-thickness
-    # ones from repeated knots) starting from zero
     def basisFuncs(self,knotSpan,u):
+        """
+        Return a list of the ``p+1`` nonzero basis functions evaluated at 
+        the parameter ``u`` in the knot span with index ``knotSpan``.
+        """
         pl = self.p
         #u_knotl = self.knots
         i = knotSpan+1
@@ -232,7 +276,7 @@ class BSpline1(object):
 
         return ders
 
-# utility functions for indexing
+# utility functions for indexing (mainly for internal library use)
 def ij2dof(i,j,M):
     return j*M + i
 
@@ -251,12 +295,24 @@ def dof2ijk(dof,M,N):
     k = dof//(M*N)
     return (i,j,k)
 
-# create a scalar B-spline of parametric dimension 1, 2, or (TODO) 3, using
-# BSpline1 instances to store info about each dimension.  No point in going
+# Use BSpline1 instances to store info about each dimension.  No point in going
 # higher than 3, since FEniCS only generates meshes up to dimension 3...
 class BSpline(AbstractScalarBasis):
 
+    """
+    Class implementing the ``AbstractScalarBasis`` interface, to represent
+    a uni-, bi-, or tri-variate B-spline.
+    """
+    
     def __init__(self,degrees,kvecs,useRect=USE_RECT_ELEM_DEFAULT):
+        """
+        Create a ``BSpline`` with degrees in each direction given by the
+        sequence ``degrees``, knot vectors given by the list of 
+        sequences ``kvecs``, and an optional Boolean parameter 
+        ``useRect``, indicating
+        whether or not rectangular elements should be used in the 
+        extracted representation.
+        """
         self.nvar = len(degrees)
         if(self.nvar > 3 or self.nvar < 1):
             print("ERROR: Unsupported parametric dimension.")
@@ -272,15 +328,23 @@ class BSpline(AbstractScalarBasis):
     #    return self.nvar
 
     def needsDG(self):
-        # check whether any of the univariate splines is discontinuous
+        """
+        Returns a Boolean, indicating whether or not the extraction requires
+        DG element (due to the function space being discontinuous somewhere).
+        """
         for i in range(0,self.nvar):
             if(self.splines[i].isDiscontinuous()):
                 return True
         return False
 
     def useRectangularElements(self):
+        """
+        Returns a Boolean indicating whether or not the basis should use
+        rectangular elements in its extraction.
+        """
         return self.useRect
-    
+
+    # non-default implementation, optimized for B-splines
     def getPrealloc(self):
         totalFuncs = 1
         for spline in self.splines:
@@ -427,45 +491,72 @@ class BSpline(AbstractScalarBasis):
                 deg += self.splines[i].p
         return deg
 
-    # return the dofs on a side (zero or one) perpendicular to a parametric
-    # direction (0, 1, or 2), capped at self.nvar-1, obviously
-    def getSideDofs(self,direction,side):
-        if(side == 0):
-            i=0
-        else:
-            i=self.splines[direction].getNcp()-1
-        M = self.splines[0].getNcp()
-        if(self.nvar == 1):
-            return [i,]
-        N = self.splines[1].getNcp()
-        if(self.nvar == 2):
-            dofs = []
-            if(direction==0):
-                for j in range(0,N):
-                    dofs += [ij2dof(i,j,M),]
-            elif(direction==1):
-                for j in range(0,M):
-                    dofs += [ij2dof(j,i,M),]
-            return dofs
-        O = self.splines[2].getNcp()
-        if(self.nvar == 3):
-            dofs = []
-            if(direction==0):
-                for j in range(0,N):
-                    for k in range(0,O):
-                        dofs += [ijk2dof(i,j,k,M,N),]
-            elif(direction==1):
-                for j in range(0,M):
-                    for k in range(0,O):
-                        dofs += [ijk2dof(j,i,k,M,N),]
-            elif(direction==2):
-                for j in range(0,M):
-                    for k in range(0,N):
-                        dofs += [ijk2dof(j,k,i,M,N),]
+    def getSideDofs(self,direction,side,nLayers=1):
+        """
+        Return the DoFs on a ``side`` (zero or one) that is perpendicular 
+        to a parametric ``direction`` (0, 1, or 2, capped at 
+        ``self.nvar-1``, obviously).  Can optionally constrain more than
+        one layer of control points (e.g., for strongly-enforced clamped BCs
+        on Kirchhoff--Love shells) using ``nLayers`` greater than its
+        default value of one.
+        """
+        offsetSign = 1-2*side
+        retval = []
+        for absOffset in range(0,nLayers):
+            offset = absOffset*offsetSign
+            if(side == 0):
+                i=0
+            else:
+                i=self.splines[direction].getNcp()-1
+            i += offset
+            M = self.splines[0].getNcp()
+            if(self.nvar == 1):
+                retval += [i,]
+                continue
+            N = self.splines[1].getNcp()
+            if(self.nvar == 2):
+                dofs = []
+                if(direction==0):
+                    for j in range(0,N):
+                        dofs += [ij2dof(i,j,M),]
+                elif(direction==1):
+                    for j in range(0,M):
+                        dofs += [ij2dof(j,i,M),]
+                retval += dofs
+                continue
+            O = self.splines[2].getNcp()
+            if(self.nvar == 3):
+                dofs = []
+                if(direction==0):
+                    for j in range(0,N):
+                        for k in range(0,O):
+                            dofs += [ijk2dof(i,j,k,M,N),]
+                elif(direction==1):
+                    for j in range(0,M):
+                        for k in range(0,O):
+                            dofs += [ijk2dof(j,i,k,M,N),]
+                elif(direction==2):
+                    for j in range(0,M):
+                        for k in range(0,N):
+                            dofs += [ijk2dof(j,k,i,M,N),]
+                retval += dofs
+                continue
+        return retval
                 
 class ExplicitBSplineControlMesh(AbstractControlMesh):
 
+    """
+    A control mesh for a B-spline with identical physical and parametric
+    domains.
+    """
+    
     def __init__(self,degrees,kvecs,extraDim=0,useRect=USE_RECT_ELEM_DEFAULT):
+        """
+        Create an ``ExplicitBSplineControlMesh`` with degrees in each direction
+        given by the sequence ``degrees`` and knot vectors given by the list
+        of sequences ``kvecs``.  The optional Boolean parameter ``useRect``
+        indicates whether or not to use rectangular FEs in the extraction.
+        """
         self.scalarSpline = BSpline(degrees,kvecs,useRect)
         # parametric = physical
         self.nvar = len(degrees)

@@ -1,4 +1,9 @@
-# some utility functions for differential geometry and whatnot in UFL
+"""
+The ``calculusUtils`` module
+----------------------------
+contains functions and classes to hide the raw UFL involved in referring PDEs
+back to the IGA parametric domain.  
+"""
 
 # note that these functions simply help prepare a UFL specification of the
 # PDE, which is then compiled into efficient code.  These are not being called
@@ -7,15 +12,19 @@
 
 from dolfin import *
 
-# get a metric tensor from a given deformation
 def getMetric(F):
+    """
+    Returns a metric tensor corresponding to a given mapping ``F`` from 
+    parametric to physical space.
+    """
     DF = grad(F)
     return DF.T*DF
 
-# get christoffel symbols for a metric g assuming the first index is the
-# raised one
-# TODO: check/test
 def getChristoffel(g):
+    """
+    Returns Christoffel symbols associated with a metric tensor ``g``.  Indices
+    are ordered based on the assumption that the first index is the raised one.
+    """
     a,b,c,d = indices(4)
     return as_tensor\
         (0.5*inv(g)[a,b]\
@@ -23,8 +32,14 @@ def getChristoffel(g):
            + grad(g)[d,b,c]\
            - grad(g)[d,c,b]), (a,d,c))
 
-# map a normal vector N forward to n, after deformation F
 def mappedNormal(N,F,normalize=True):
+    """
+    Returns a deformed normal vector corresponding to the area element with
+    normal ``N`` in the parametric reference domain.  Deformation given by
+    ``F``.  Optionally, the normal can be left un-normalized by setting
+    ``normalize = False``.  In that case, the magnitude is the ratio of 
+    deformed to reference area elements.
+    """
     DF = grad(F)
     g = getMetric(F)
     n = DF*inv(g)*N
@@ -35,23 +50,41 @@ def mappedNormal(N,F,normalize=True):
     # sanity check: consistent w/ Nanson formula for invertible DF,
     # metric = (DF)^T * DF
 
-# pseudo-inverse of DF for change-of-variables
 def pinvD(F):
+    """
+    Returns the Moore--Penrose pseudo-inverse of the derivative of the mapping
+    ``F``.
+    """
     DF = grad(F)
     g = getMetric(F)
     return inv(g)*DF.T
     
-# volume jacobian
 def volumeJacobian(g):
+    """
+    Returns the volume element associated with the metric ``g``.
+    """
     return sqrt(det(g))
     
-# surface jacobian
 def surfaceJacobian(g,N):
+    """
+    Returns the surface element associated with the metric ``g``, for a surface
+    oriented in the direction given by unit vector ``N``.
+    """
     return sqrt(det(g)*inner(N,inv(g)*N))
 
 # class for tensors in curvilinear coordinates w/ metric g
 class CurvilinearTensor:
+    """
+    Class to represent arbitrary tensors in curvilinear coordinates, with a
+    mechanism to distinguish between raised and lowered indices.
+    """
     def __init__(self,T,g,lowered=None):
+        """
+        Create a ``CurvilinearTensor`` with components given by the UFL tensor
+        ``T``, on a manifold with metric ``g``.  The sequence of Booleans
+        ``lowered`` indicates whether or not each index is lowered.  The 
+        default is for all indices to be lowered.
+        """
         self.T = T
         self.g = g
         if(lowered != None):
@@ -73,8 +106,11 @@ class CurvilinearTensor:
     def __rmul__(self,other):
         return CurvilinearTensor(other*self.T,self.g,self.lowered)
                 
-    # not well tested...
+    # mainly for internal use. not well tested...
     def raiseLowerIndex(self,i):
+        """
+        Flips the raised/lowered status of the ``i``-th index.
+        """
         n = rank(self.T)
         ii = indices(n+1)
         mat = self.g
@@ -89,41 +125,65 @@ class CurvilinearTensor:
                                  self.lowered[0:i]\
                                  +[not self.lowered[i],]+self.lowered[i+1:])
     def raiseIndex(self,i):
+        """
+        Returns an associated tensor with the ``i``-th index raised.
+        """
         if(self.lowered[i]):
             return self.raiseLowerIndex(i)
         else:
             return self
         
     def lowerIndex(self,i):
+        """
+        Returns an associated tensor with the ``i``-th index lowered.
+        """
         if(not self.lowered[i]):
             return self.raiseLowerIndex(i)
         else:
             return self
 
     def sharp(self):
+        """
+        Returns an associated tensor with all indices raised.
+        """
         retval = self
         for i in range(0,rank(self.T)):
             retval = retval.raiseIndex(i)
         return retval
 
     def flat(self):
+        """
+        Returns an associated tensor with all indices lowered.
+        """
         retval = self
         for i in range(0,rank(self.T)):
             retval = retval.lowerIndex(i)
         return retval
 
     def rank(self):
+        """
+        Returns the rank of the tensor.
+        """
         return rank(self.T)
 
 def curvilinearInner(T,S):
+    """
+    Returns the inner product of ``CurvilinearTensor`` objects
+    ``T`` and ``S``, inserting factors of the metric and inverse metric
+    as needed, depending on the co/contra-variant status of corresponding
+    indices.
+    """
     Tsharp = T.sharp();
     Sflat = S.flat();
     ii = indices(rank(T.T))
     return as_tensor(Tsharp.T[ii]*Sflat.T[ii],())
 
-# Covariant derivative of curvilinear tensor
 # TODO: check/test more thoroughly
 def covariantDerivative(T):
+    """
+    Returns a ``CurvilinearTensor`` that is the covariant derivative of
+    the ``CurvilinearTensor`` argument ``T``.
+    """
     n = rank(T.T)
     ii = indices(n+2)
     g = T.g
@@ -143,8 +203,11 @@ def covariantDerivative(T):
     newLowered = T.lowered+[True,]
     return CurvilinearTensor(retval,g,newLowered)
 
-# gradient of curvilinear tensor
 def curvilinearGrad(T):
+    """
+    Returns the gradient of ``CurvilinearTensor`` argument ``T``, i.e., the
+    covariant derivative with the last index raised.
+    """
     n = rank(T.T)
     ii = indices(n+2)
     g = T.g
@@ -155,9 +218,15 @@ def curvilinearGrad(T):
                        ii[0:n]+(ii[n+1],))
     return CurvilinearTensor(retval,g,T.lowered+[False,])
 
-# divergence of curvilinear tensor; contracts new lowered index from
-# derivative with last raised index of tensor.  error if no raised indices.
 def curvilinearDiv(T):
+    """
+    Returns the divergence of the ``CurvilinearTensor`` argument ``T``, i.e.,
+    the covariant derivative, but contracting over the new index and the 
+    last raised index.  
+
+    NOTE: This operation is invalid for tensors that do not 
+    contain at least one raised index.
+    """
     n = rank(T.T)
     ii = indices(n)
     g = T.g
@@ -238,3 +307,61 @@ class tIGArMeasure:
         
     def __rmul__(self, other):
         return (other*self.J)*self.meas
+
+def getQuadRule(n):
+    """
+    Return a list of points and a list of weights for integration over the
+    interval (-1,1), using ``n`` quadrature points.  
+
+    NOTE: This functionality is mainly intended
+    for use in through-thickness integration of Kirchhoff--Love shell
+    formulations, but might also be useful for implementing space--time
+    formulations using a mixed element to combine DoFs from various time
+    levels.
+    """
+    if(n==1):
+        xi = [Constant(0.0),]
+        w = [Constant(2.0),]
+        return (xi,w)
+    if(n==2):
+        xi = [Constant(-0.5773502691896257645091488),
+              Constant(0.5773502691896257645091488)]
+        w = [Constant(1.0),
+             Constant(1.0)]
+        return (xi,w)
+    if(n==3):
+        xi = [Constant(-0.77459666924148337703585308),
+              Constant(0.0),
+              Constant(0.77459666924148337703585308)]
+        w = [Constant(0.55555555555555555555555556),
+             Constant(0.88888888888888888888888889),
+             Constant(0.55555555555555555555555556)]
+        return (xi,w)
+    if(n==4):
+        xi = [Constant(-0.86113631159405257524),
+              Constant(-0.33998104358485626481),
+              Constant(0.33998104358485626481),
+              Constant(0.86113631159405257524)]
+        w = [Constant(0.34785484513745385736),
+             Constant(0.65214515486254614264),
+             Constant(0.65214515486254614264),
+             Constant(0.34785484513745385736)]
+    
+    #TODO add more quadrature rules
+    
+    if(mpirank==0):
+        print("ERROR: invalid number of quadrature points requested.")
+        exit()
+
+def getQuadRuleInterval(n,L):
+    """
+    Returns an ``n``-point quadrature rule for the interval 
+    (-``L``/2,``L``/2), consisting of a list of points and list of weights.
+    """
+    xi_hat, w_hat = getQuadRule(n)
+    xi = []
+    w = []
+    for i in range(0,n):
+        xi += [L*xi_hat[i]/2.0,]
+        w += [L*w_hat[i]/2.0,]
+    return (xi,w)
