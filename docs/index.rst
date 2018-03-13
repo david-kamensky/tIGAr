@@ -18,6 +18,12 @@ This document contains detailed information about the usage of functions, classe
 .. automodule:: tIGAr.BSplines
 	       :members:
 
+.. automodule:: tIGAr.NURBS
+	       :members:
+
+.. automodule:: tIGAr.RhinoTSplines
+	       :members:
+
 .. automodule:: tIGAr.calculusUtils
 	       :members:
 

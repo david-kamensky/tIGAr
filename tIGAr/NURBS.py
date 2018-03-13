@@ -1,13 +1,26 @@
-# module to read in a previously-written PetIGA object from igakit, and
-# generate a NURBS control mesh from it
+"""
+The ``NURBS`` module
+--------------------
+leverages ``igakit`` to read in NURBS data in PetIGA's format.  The module
+``igakit`` must be installed for this to be usable.
+"""
 
 from tIGAr.common import *
 from tIGAr.BSplines import *
 from igakit.io import PetIGA
 
 class NURBSControlMesh(AbstractControlMesh):
-
+    """
+    This class represents a control mesh with NURBS geometry.
+    """
     def __init__(self,fname,useRect=USE_RECT_ELEM_DEFAULT):
+        """
+        Generates a NURBS control mesh from PetIGA geometry input data 
+        (as generated, e.g., by a separate ``igakit`` script) in the 
+        file with name ``fname``.  The optional parameter ``useRect`` 
+        is a Boolean specifying whether or not to use rectangular FEs for 
+        the extraction.
+        """
 
         # get an igakit nurbs object from the file
         ikNURBS = PetIGA().read(fname)

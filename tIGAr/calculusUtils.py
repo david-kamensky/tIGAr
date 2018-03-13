@@ -246,19 +246,32 @@ def curvilinearDiv(T):
 # in the Cartesian coordinates of the physical configuration, NOT in the
 # local coordinate chart w.r.t. which derivatives are taken by FEniCS
 def cartesianGrad(f,F):
+    """
+    The gradient of an arbitrary-rank tensor ``f`` in spatial Cartesian
+    coordinates, assuming the parametric domain has been mapped to its
+    physical configuration by the mapping ``F``.
+    """
     n = rank(f)
     ii = indices(n+2)
     pinvDF = pinvD(F)
     return as_tensor(grad(f)[ii[0:n+1]]\
                      *pinvDF[ii[n],ii[n+1]],\
                      ii[0:n]+(ii[n+1],))
+
 def cartesianDiv(f,F):
+    """
+    The divergence operator corresponding to ``cartesianGrad(f,F)`` that 
+    sums on the last two indices.
+    """
     n = rank(f)
     ii = indices(n)
     return as_tensor(cartesianGrad(f,F)[ii+(ii[n-1],)],ii[0:n-1])
 
-# only applies to f w/ rank 1, in 3D
 def cartesianCurl(f,F):
+    """
+    The curl operator corresponding to ``cartesianGrad(f,F)``.  Only valid
+    for ``f`` of rank 1, with dimension 3.
+    """
     eps = PermutationSymbol(3)
     gradf = cartesianGrad(f,F)
     (i,j,k) = indices(3)
@@ -267,18 +280,27 @@ def cartesianCurl(f,F):
 # pushforwards for compatible spaces; output is in cartesian coordinates for
 # physical space
 
-# curl-conserving
 def cartesianPushforwardN(u,F):
+    """
+    The curl-conserving pushforward of ``u`` by mapping ``F`` (as might be
+    used for a Nedelec elemeng, hence "N".
+    """
     DF = grad(F)
     return inv(DF.T)*u
 
-# div-conserving
 def cartesianPushforwardRT(v,F):
+    """
+    The div-conserving pushforward of ``v`` by mapping ``F`` (as might be
+    used for a Raviart--Thomas elemeng, hence "RT".
+    """
     DF = grad(F)
     return DF*v/det(DF)
 
-# mass-conserving
 def cartesianPushforwardW(phi,F):
+    """
+    The mass-conserving pushforward of scalar field ``phi`` by mapping 
+    ``F``.  ("W" comes from notation in J.A. Evans's dissertation.)
+    """
     DF = grad(F)
     return phi/det(DF)
 
@@ -287,12 +309,29 @@ def cartesianPushforwardW(phi,F):
 # then overload __rmul__()
 class tIGArMeasure:
 
+    """
+    A UFL object multiplied by a measure produces a ``Form``, which cannot
+    then be used conveniently, like a weighted measure.  This class is a 
+    way to circumvent that, by storing the weight and measure separately,
+    and combining them only once right-multiplied by something else.
+    """
+    
     # if quadDeg==None, then this works if meas is a FEniCS measure, OR if
     # meas is another tIGAr measure; it's a good idea to set quadDeg
     # if meas is a FEniCS measure, though, since the convoluted expressions
     # for rational splines tend to drive up the automatically-determined
     # quadrature degree
     def __init__(self,J,meas,quadDeg=None,boundaryMarkers=None):
+        """
+        Initializes a weighted measure that will behave like ``J*meas``.
+        The optional argument ``quadDeg`` sets the quadrature degree of 
+        ``meas``, which is a good idea for integrating the sorts of 
+        complicated expressions that come out of rational spline 
+        discretizations, because the automatically-computed quadrature rules
+        have too many points.  The argument ``boundaryMarkers`` can be used
+        to set ``subdomain_data`` of ``meas``, to perform integrals over
+        specific sub-domains.
+        """
         if(quadDeg != None):
             # TODO: is this reflected in the calling scope?
             meas = meas(metadata={'quadrature_degree': quadDeg})
@@ -301,11 +340,21 @@ class tIGArMeasure:
         self.meas = meas
         self.J = J
 
-    # pass an argument indicating a subdomain marker
+    # TODO: should probably change name of argument so that the measure
+    # can be called exactly like spline.dx(subdomain_data=...)
     def __call__(self,marker):
+        """
+        This allows ``subdomain_data`` of an existing measure to be 
+        changed to ``marker`` after the fact, using the same calling
+        syntax that one would use to change ``subdomain_data`` of an
+        ordinary measure.
+        """
         return tIGArMeasure(self.J,self.meas(marker))
         
     def __rmul__(self, other):
+        """
+        Multiplies ``other`` by ``self.J``, THEN multiplies by ``self.meas``.
+        """
         return (other*self.J)*self.meas
 
 def getQuadRule(n):

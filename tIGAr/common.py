@@ -118,98 +118,135 @@ class AbstractExtractionGenerator(object):
         else:
             return "Lagrange"
         
-    # customized stuff to call in constructor
     @abc.abstractmethod
     def customSetup(self,args):
+        """
+        Customized instructions to execute during initialization.  ``args``
+        is a tuple of custom arguments.
+        """
         return
 
-    # number of fields the spline has
     @abc.abstractmethod
     def getNFields(self):
+        """
+        Returns the number of unknown fields for the spline.
+        """
         return
 
-    # return the direction-th homogeneous coordinate of the node-th
-    # control point
     @abc.abstractmethod
     def getHomogeneousCoordinate(self,node,direction):
+        """
+        Return the ``direction``-th homogeneous coordinate of the ``node``-th
+        control point of the spline.
+        """
         return
 
-    # return an FE mesh suitable for extracting the subclass's spline space
     @abc.abstractmethod
     def generateMesh(self):
-        return #self.uspline.generateMesh()
-
-    # return the degree of polynomial to be used in the extracted
-    # representation
-    @abc.abstractmethod
-    def getDegree(self,field):
+        """
+        Generate and return an FE mesh suitable for extracting the 
+        subclass's spline space.
+        """
         return
 
-    # return the total number of control points of the spline
+    @abc.abstractmethod
+    def getDegree(self,field):
+        """
+        Return the degree of polynomial to be used in the extracted
+        representation of a given ``field``, with ``-1`` being the 
+        control field.
+        """
+        return
+
     @abc.abstractmethod
     def getNcp(self,field):
+        """
+        Return the total number of degrees of freedom of a given ``field``,
+        with field ``-1`` being the control mesh field.
+        """
         return
 
     @abc.abstractmethod
     def getNsd(self):
+        """
+        Return the number of spatial dimensions of the physical domain.
+        """
         return
 
-    # given a field and a local dof number, get the global dof number; this
-    # is BEFORE re-ordering for parallelization
     def globalDof(self,field,localDof):
+        """
+        Given a ``field`` and a local DoF number ``localDof``, 
+        return the global DoF number; 
+        this is BEFORE any re-ordering for parallelization.
+        """
         # offset localDof by 
         retval = localDof
         for i in range(0,field):
             retval += self.getNcp(i)
         return retval
     
-    # generates an index set to permute the IGA degrees of freedom
-    # into an order that is (hopefully) efficient given the partitioning
-    # of the FEM nodes.  Assume that self.M currently holds the
-    # un-permuted M-matrix.
-    # Default implementation just fills in an identity permutation.
     def generatePermutation(self):
+        """
+        Generates an index set to permute the IGA degrees of freedom
+        into an order that is (hopefully) efficient given the partitioning
+        of the FEM nodes.  Assume that ``self.M`` currently holds the
+        un-permuted extraction matrix.
+        Default implementation just fills in an identity permutation.
+        """
         return generateIdentityPermutation\
             (self.M.mat().getOwnershipRangeColumn())
         
-    # get DOF indices on this processor that are constrained to zero
-    #@abc.abstractmethod
-    #def generateZeroDofs(self):
-    #    return []
-
-    # adds new dofs in global numbering to zeroDofs
     def addZeroDofsGlobal(self,newDofs):
+        """
+        Adds new DoFs in the list ``newDofs`` in global numbering 
+        to the list of DoFs to which
+        homogeneous Dirichlet BCs will be applied during analysis.
+        """
         self.zeroDofs += newDofs
         
-    # adds new dofs in local numbering of a field
     def addZeroDofs(self,field,newDofs):
+        """
+        Adds new DoFs in the list ``newDofs`` in local numbering for a 
+        given ``field`` to the list of DoFs to which
+        homogeneous Dirichlet BCs will be applied during analysis.
+        """
         newDofsGlobal = newDofs[:]
         for i in range(0,len(newDofs)):
             newDofsGlobal[i] = self.globalDof(field,newDofs[i])
         self.addZeroDofsGlobal(newDofsGlobal)
     
-    # - return the number of entries per row needed in the M matrix for
-    # extraction
-    # - control is a boolean for whether or not this is the preallocation
-    # for the scalar field M used for control point coordinates
-    # - if left as the default, this could potentially slow down for
-    # very high-order splines; may be a good idea to override in subclasses
     def getPrealloc(self,control):
+        """
+        Returns the number of entries per row needed in the extraction matrix.
+        The parameter ``control`` is a Boolean indicating whether or not this 
+        is the preallocation for the scalar field used for control point 
+        coordinates.
+
+        If left as the default, this could potentially slow down drastically
+        for very high-order splines, or waste a lot of memory for low order
+        splines.  In general, it is a good idea to override this in 
+        subclasses.
+        """
         return DEFAULT_PREALLOC
     
-    # return a matrix M for extraction of the scalar field used for components
-    # of the control functions
     @abc.abstractmethod
     def generateM_control(self):
+        """
+        Return the extraction matrix for the control field.
+        """
         return
 
-    # return M for unknown fields
     @abc.abstractmethod
     def generateM(self):
+        """
+        Return the extraction matrix for the unknowns.
+        """
         return
         
-    # common setup steps for all subclasses (called in __init__())
     def genericSetup(self):
+        """
+        Common setup steps for all subclasses (called in ``self.__init__()``).
+        """
         
         self.mesh = self.generateMesh()
 
@@ -270,9 +307,13 @@ class AbstractExtractionGenerator(object):
         #    self.zeroDofs = self.permutationAO.app2petsc\
         #                    (zeroDofIS).getIndices()
             
-    # do after __init__(), so that BCs can be added to initialized object
-    # in natural ordering
     def applyPermutation(self):
+        """
+        Permutes the order of the IGA degrees of freedom, so that their
+        parallel partitioning better aligns with that of the FE degrees 
+        of freedom, which is generated by standard mesh-partitioning
+        approaches in FEniCS.  
+        """
         if(mpisize > 1):
 
             self.permutation = self.generatePermutation()
@@ -294,8 +335,14 @@ class AbstractExtractionGenerator(object):
             self.zeroDofs = self.permutationAO.app2petsc\
                             (zeroDofIS).getIndices()
     
-    # write extraction data to files in a directory dirname
     def writeExtraction(self,dirname,doPermutation=True):
+        """
+        Writes all extraction data to files in a directory named 
+        ``dirname``.  The optional argument ``doPermutation`` is a Boolean
+        indicating whether or not to permute the unknowns for better
+        parallel performance in matrix--matrix multiplications.  (Computing
+        this permuation may be slow for large meshes.)
+        """
         # need:
         # - HDF5 file w/
         # -- mesh
@@ -373,8 +420,6 @@ class AbstractExtractionGenerator(object):
             f.close()
         MPI.barrier(mycomm)
 
-# class to represent an expression on a spline space that can be
-# interpolated onto linears for plotting
 class SplineDisplacementExpression(Expression):
 
     """
@@ -464,7 +509,72 @@ class ExtractedSpline(object):
     extraction generators).  
     """
 
-    def __init__(self,dirname,quadDeg,mesh=None):
+    def __init__(self,sourceArg,quadDeg,mesh=None,doPermutation=True):
+
+        """
+        Generates instance from extraction data in ``sourceArg``, which
+        might either be an ``AbstractExtractionGenerator`` or the name of
+        a directory containing extraction data.
+        Optionally takes a ``mesh`` argument, so that function spaces can be
+        established on the same mesh as an existing spline object for
+        facilitating segregated solver schemes.  (Splines common to one
+        set of extraction data are always treated as a monolothic mixed
+        function space.)  Everything to do with the spline is integrated 
+        using a quadrature rule of degree ``quadDeg``.
+        The argument ``doPermutation`` chooses whether or not to apply a
+        permutation to the IGA DoF order.  It is ignored if reading
+        extraction data from the filesystem.
+        """
+
+        if(isinstance(sourceArg,AbstractExtractionGenerator)):
+            self.initFromGenerator(sourceArg,quadDeg,mesh)
+        else:
+            self.initFromFilesystem(sourceArg,quadDeg,mesh)
+            
+        self.genericSetup()
+            
+
+    def initFromGenerator(self,generator,quadDeg,mesh=None,
+                          doPermutation=True):
+        """
+        Generates instance from an ``AbstractExtractionGenerator``, without
+        passing through the filesystem.  This mainly exists to circumvent
+        broken parallel HDF5 file output for quads and hexes in 2017.2 
+        (See Issue #1000 for dolfin on Bitbucket.)  
+        
+        NOTE: While seemingly-convenient for small-scale testing,
+        this is not the preferred workflow for most realistic 
+        cases, as it forces a possibly-expensive preprocessing step to 
+        execute every time the analysis code is run.  
+        """
+
+        if(doPermutation):
+            generator.applyPermutation()
+        
+        self.quadDeg = quadDeg
+        self.nsd = generator.getNsd()
+        self.elementType = generator.extractionElement()
+        self.nFields = generator.getNFields()
+        self.p_control = generator.getDegree(-1)
+        self.p = []
+        for i in range(0,self.nFields):
+            self.p += [generator.getDegree(i)]
+        if(mesh==None):
+            self.mesh = generator.mesh
+        else:
+            self.mesh = mesh
+        self.cpFuncs = generator.cpFuncs
+        self.VE = generator.VE
+        self.VE_control = generator.VE_control
+        self.V = generator.V
+        self.V_control = generator.V_control
+        self.M = generator.M
+        self.M_control = generator.M_control
+        zeroDofIS = PETSc.IS()
+        zeroDofIS.createGeneral(array(generator.zeroDofs,dtype=INDEX_TYPE))
+        self.zeroDofs = zeroDofIS
+            
+    def initFromFilesystem(self,dirname,quadDeg,mesh=None):
 
         """
         Generates instance from extraction data in directory ``dirname``. 
@@ -517,11 +627,6 @@ class ExtractedSpline(object):
 
         else:
             self.mesh = mesh
-
-        # for marking subdomains
-        #self.boundaryMarkers = FacetFunctionSizet(self.mesh,0)
-        self.boundaryMarkers \
-            = MeshFunctionSizet(self.mesh,self.mesh.topology().dim()-1,0)
         
         # create function spaces
         self.VE_control\
@@ -571,8 +676,6 @@ class ExtractedSpline(object):
                                           'r')
         
         self.M_control = PETScMatrix(MPETSc.load(viewer))
-        self.MT_control \
-            = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
 
         #exit()
         
@@ -595,8 +698,6 @@ class ExtractedSpline(object):
             = PETSc.Viewer().createBinary(dirname\
                                           +"/"+EXTRACTION_MAT_FILE,'r')
         self.M = PETScMatrix(MPETSc2.load(viewer))
-        self.MT \
-            = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
 
         # read zero-ed dofs
         #f = open(dirname+"/"+EXTRACTION_ZERO_DOFS_FILE(mpirank),"r")
@@ -618,6 +719,24 @@ class ExtractedSpline(object):
                       (dirname+"/"+EXTRACTION_ZERO_DOFS_FILE,"r")
         self.zeroDofs = PETSc.IS()
         self.zeroDofs.load(viewer)
+
+
+    def genericSetup(self):
+
+        """
+        Setup steps to take regardless of the source of extraction data.
+        """
+        
+        # for marking subdomains
+        #self.boundaryMarkers = FacetFunctionSizet(self.mesh,0)
+        self.boundaryMarkers \
+            = MeshFunctionSizet(self.mesh,self.mesh.topology().dim()-1,0)
+        
+        # caching transposes of extraction matrices
+        self.MT_control \
+            = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
+        self.MT \
+            = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
         
         # geometrical mapping
         components = []
