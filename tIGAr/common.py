@@ -282,6 +282,25 @@ class AbstractExtractionGenerator(object):
         self.M_control = self.generateM_control()
         self.M = self.generateM()        
 
+        # get transpose
+        MT_control = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
+        #MT = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
+
+        # generating CPs, weights in spline space:
+        # (control net never permuted)
+        for i in range(0,self.nsd+1):
+            MTC = MT_control*(self.cpFuncs[i].vector())
+            Istart, Iend = as_backend_type(MTC).vec().getOwnershipRange()
+            for I in arange(Istart, Iend):
+                as_backend_type(MTC).vec()[I] \
+                    = self.getHomogeneousCoordinate(I,i)
+            as_backend_type(MTC).vec().assemblyBegin()
+            as_backend_type(MTC).vec().assemblyEnd()
+
+            self.cpFuncs[i].vector().set_local((self.M_control*MTC).get_local())
+            as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
+
+        
         # may need to be permuted
         self.zeroDofs = [] #self.generateZeroDofs()
         
@@ -359,23 +378,6 @@ class AbstractExtractionGenerator(object):
         if(doPermutation):
             self.applyPermutation()
         
-        # get transpose
-        MT_control = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
-        #MT = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
-
-        # generating CPs, weights in spline space:
-        # (control net never permuted)
-        for i in range(0,self.nsd+1):
-            MTC = MT_control*(self.cpFuncs[i].vector())
-            Istart, Iend = as_backend_type(MTC).vec().getOwnershipRange()
-            for I in arange(Istart, Iend):
-                as_backend_type(MTC).vec()[I] \
-                    = self.getHomogeneousCoordinate(I,i)
-            as_backend_type(MTC).vec().assemblyBegin()
-            as_backend_type(MTC).vec().assemblyEnd()
-
-            self.cpFuncs[i].vector().set_local((self.M_control*MTC).get_local())
-            as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
 
         # write HDF file
         f = HDF5File(mpi_comm_world(),dirname+"/"+EXTRACTION_DATA_FILE,"w")
