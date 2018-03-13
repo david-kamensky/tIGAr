@@ -66,12 +66,15 @@ def RhinoTSplineScalarBasisFuncs(xi,C):
 # eval-ing shape functions
 class RhinoTSplineScalarBasis(AbstractScalarBasis):
 
-    def __init__(self,fname):
+    def __init__(self,fname,useRect=USE_RECT_ELEM_DEFAULT):
         """
         Generates an instance of ``RhinoTSplineScalarBasis`` from 
-        element-by-element extraction data in the file ``fname``.
+        element-by-element extraction data in the file ``fname``.  Can
+        optionally choose whether or not to use rectangular elements for
+        extraction by setting Boolean argument ``useRect``.
         """
         self.nvar = 2
+        self.useRect = useRect
         # read in a T-spline patch from file fname
         # TODO: do this efficiently w/ numpy arrays instead of py lists
         f = open(fname,"r")
@@ -105,7 +108,13 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
 
     #def getParametricDimension(self):
     #    return self.nvar
-        
+
+    def useRectangularElements(self):
+        return self.useRect
+
+    def needsDG(self):
+        return False
+    
     def getNodesAndEvals(self,xi):
         elementIndex = int(xi[0]/3.0 + 0.1)
         u = xi[0] - 3.0*elementIndex - 1.0
@@ -126,43 +135,78 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
         if(mpirank == 0):
             fs = '<?xml version="1.0" encoding="UTF-8"?>' + "\n"
             fs += '<dolfin xmlns:dolfin="http://www.fenics.org/dolfin/">'+"\n"
-            fs += '<mesh celltype="triangle" dim="2">' + "\n"
-            nverts = 4*self.nelBez
-            nel = 2*self.nelBez
-            fs += '<vertices size="'+str(nverts)+'">' + "\n"
-            vertCounter = 0
-            for i in range(0,self.nelBez):
-                x0 = repr(3.0*i)
-                x1 = repr(3.0*i+2.0)
-                y0 = repr(-1.0)
-                y1 = repr(1.0)
-                fs += '<vertex index="'+str(vertCounter)\
-                      +'" x="'+x0+'" y="'+y0+'"/>' + "\n"
-                fs += '<vertex index="'+str(vertCounter+1)\
-                      +'" x="'+x1+'" y="'+y0+'"/>' + "\n"
-                fs += '<vertex index="'+str(vertCounter+2)\
-                      +'" x="'+x0+'" y="'+y1+'"/>' + "\n"
-                fs += '<vertex index="'+str(vertCounter+3)\
-                      +'" x="'+x1+'" y="'+y1+'"/>' + "\n"
-                vertCounter += 4
-            fs += '</vertices>' + "\n"
-            fs += '<cells size="'+str(nel)+'">' + "\n"
-            elCounter = 0
-            for i in range(0,self.nelBez):
-                v0 = str(i*4+0)
-                v1 = str(i*4+1)
-                v2 = str(i*4+3)
-                fs += '<triangle index="'+str(elCounter)\
-                      +'" v0="'+v0+'" v1="'+v1+'" v2="'+v2+'"/>'\
-                      + "\n"
-                v0 = str(i*4+0)
-                v1 = str(i*4+3)
-                v2 = str(i*4+2)
-                fs += '<triangle index="'+str(elCounter+1)\
-                      +'" v0="'+v0+'" v1="'+v1+'" v2="'+v2+'"/>'\
-                      + "\n"
-                elCounter += 2
-            fs += '</cells></mesh></dolfin>'
+            if(self.useRect):
+                fs += '<mesh celltype="quadrilateral" dim="2">' + "\n"
+                nverts = 4*self.nelBez
+                nel = self.nelBez
+                fs += '<vertices size="'+str(nverts)+'">' + "\n"
+                vertCounter = 0
+                for i in range(0,self.nelBez):
+                    x0 = repr(3.0*i)
+                    x1 = repr(3.0*i+2.0)
+                    y0 = repr(-1.0)
+                    y1 = repr(1.0)
+                    fs += '<vertex index="'+str(vertCounter)\
+                          +'" x="'+x0+'" y="'+y0+'"/>' + "\n"
+                    fs += '<vertex index="'+str(vertCounter+1)\
+                          +'" x="'+x1+'" y="'+y0+'"/>' + "\n"
+                    fs += '<vertex index="'+str(vertCounter+2)\
+                          +'" x="'+x0+'" y="'+y1+'"/>' + "\n"
+                    fs += '<vertex index="'+str(vertCounter+3)\
+                          +'" x="'+x1+'" y="'+y1+'"/>' + "\n"
+                    vertCounter += 4
+                fs += '</vertices>' + "\n"
+                fs += '<cells size="'+str(nel)+'">' + "\n"
+                elCounter = 0
+                for i in range(0,self.nelBez):
+                    v0 = str(i*4+0)
+                    v1 = str(i*4+1)
+                    v2 = str(i*4+2)
+                    v3 = str(i*4+3)
+                    fs += '<triangle index="'+str(elCounter)\
+                          +'" v0="'+v0+'" v1="'+v1\
+                          +'" v2="'+v2+'" v3="'+v3+'"/>'\
+                          + "\n"
+                    elCounter += 1
+                fs += '</cells></mesh></dolfin>'
+            else:
+                fs += '<mesh celltype="triangle" dim="2">' + "\n"
+                nverts = 4*self.nelBez
+                nel = 2*self.nelBez
+                fs += '<vertices size="'+str(nverts)+'">' + "\n"
+                vertCounter = 0
+                for i in range(0,self.nelBez):
+                    x0 = repr(3.0*i)
+                    x1 = repr(3.0*i+2.0)
+                    y0 = repr(-1.0)
+                    y1 = repr(1.0)
+                    fs += '<vertex index="'+str(vertCounter)\
+                          +'" x="'+x0+'" y="'+y0+'"/>' + "\n"
+                    fs += '<vertex index="'+str(vertCounter+1)\
+                          +'" x="'+x1+'" y="'+y0+'"/>' + "\n"
+                    fs += '<vertex index="'+str(vertCounter+2)\
+                          +'" x="'+x0+'" y="'+y1+'"/>' + "\n"
+                    fs += '<vertex index="'+str(vertCounter+3)\
+                          +'" x="'+x1+'" y="'+y1+'"/>' + "\n"
+                    vertCounter += 4
+                fs += '</vertices>' + "\n"
+                fs += '<cells size="'+str(nel)+'">' + "\n"
+                elCounter = 0
+                for i in range(0,self.nelBez):
+                    v0 = str(i*4+0)
+                    v1 = str(i*4+1)
+                    v2 = str(i*4+3)
+                    fs += '<triangle index="'+str(elCounter)\
+                          +'" v0="'+v0+'" v1="'+v1+'" v2="'+v2+'"/>'\
+                          + "\n"
+                    v0 = str(i*4+0)
+                    v1 = str(i*4+3)
+                    v2 = str(i*4+2)
+                    fs += '<triangle index="'+str(elCounter+1)\
+                          +'" v0="'+v0+'" v1="'+v1+'" v2="'+v2+'"/>'\
+                          + "\n"
+                    elCounter += 2
+                fs += '</cells></mesh></dolfin>'
             f = open(self.MESH_FILE_NAME,'w')
             f.write(fs)
             f.close()
@@ -177,7 +221,10 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
         return self.ncp
 
     def getDegree(self):
-        return 6
+        if(self.useRect):
+            return 3
+        else:
+            return 6
 
 class RhinoTSplineControlMesh(AbstractControlMesh):
 
@@ -186,12 +233,14 @@ class RhinoTSplineControlMesh(AbstractControlMesh):
     from Rhino to represent a mapping from parametric to physical space.
     """
     
-    def __init__(self,fname):
+    def __init__(self,fname,useRect=USE_RECT_ELEM_DEFAULT):
         """
         Initialize a control mesh by reading extraction data and control
-        points from a Rhino T-spline file named ``fname``.  
+        points from a Rhino T-spline file named ``fname``.  Can
+        optionally choose whether or not to use rectangular elements for
+        extraction by setting Boolean argument ``useRect``.
         """
-        self.scalarSpline = RhinoTSplineScalarBasis(fname)
+        self.scalarSpline = RhinoTSplineScalarBasis(fname,useRect)
         self.nsd = 3
         # read in control net from fname
         f = open(fname,"r")
