@@ -13,4 +13,4 @@ Install all dependencies, clone the repository (or download and extract from an 
 ```bash
 export PYTHONPATH=/path/to/repository/:$PYTHONPATH
 ```
-to your `~/.bashrc` file.  To (optionally) build the API documentation, change directory to `docs` and type `make html`.The main documentation will then be in `./_build/html/index.html`, which can be opened with a web browser.  
+to your `~/.bashrc` file (and `source`-ing it).  To (optionally) build the API documentation, change directory to `docs` and type `make html`. The main documentation will then be in `./_build/html/index.html`, which can be opened with a web browser.  
