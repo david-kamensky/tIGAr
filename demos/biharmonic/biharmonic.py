@@ -90,7 +90,7 @@ x = spline.spatialCoordinates()
 soln = (cos(pi*x[0])+1.0)*(cos(pi*x[1])+1.0)
 f = lap(lap(soln))
 
-# Set up and solve the Poisson problem
+# Set up and solve the biharmonic problem
 res = inner(lap(u),lap(v))*spline.dx - inner(f,v)*spline.dx
 u = Function(spline.V)
 spline.solveLinearVariationalProblem(res,u)
