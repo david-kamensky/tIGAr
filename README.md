@@ -6,6 +6,7 @@ A Python library for isogeometric analysis (IGA) using FEniCS.
 * Any meaningful usage requires [FEniCS](https://fenicsproject.org/) (version 2017.2) and its dependencies.
 * Usage of the NURBS module requires [igakit](https://bitbucket.org/dalcinl/igakit).
 * Compiling the API documentation requires [Sphinx](http://www.sphinx-doc.org/en/master/).
+* The most convenient program for visualizing results is [ParaView](https://www.paraview.org/).
 
 ## Installation
 
