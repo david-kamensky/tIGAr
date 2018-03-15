@@ -544,7 +544,9 @@ class ExtractedSpline(object):
         broken parallel HDF5 file output for quads and hexes in 2017.2 
         (See Issue #1000 for dolfin on Bitbucket.)  
         
-        NOTE: While seemingly-convenient for small-scale testing,
+        NOTE: While seemingly-convenient for small-scale testing/demos, and 
+        more robust in the sense that it makes no assumptions about the
+        DoF ordering in FunctionSpaces being deterministic,
         this is not the preferred workflow for most realistic 
         cases, as it forces a possibly-expensive preprocessing step to 
         execute every time the analysis code is run.  

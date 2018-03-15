@@ -2,10 +2,11 @@
 The ``calculusUtils`` module
 ----------------------------
 contains functions and classes to hide the raw UFL involved in referring PDEs
-back to the IGA parametric domain.  
+back to the IGA parametric domain.  Note that most functionality in this 
+module can also be used in non-tIGAr FEniCS applications.  
 """
 
-# note that these functions simply help prepare a UFL specification of the
+# Note that these functions simply help prepare a UFL specification of the
 # PDE, which is then compiled into efficient code.  These are not being called
 # inside some inner loop over quadrature points, and should therefore be
 # optimized for generality/readability rather than speed of execution.
@@ -395,12 +396,12 @@ def getQuadRule(n):
              Constant(0.65214515486254614264),
              Constant(0.65214515486254614264),
              Constant(0.34785484513745385736)]
+        return (xi,w)
     
     #TODO add more quadrature rules
     
-    if(mpirank==0):
-        print("ERROR: invalid number of quadrature points requested.")
-        exit()
+    print("ERROR: invalid number of quadrature points requested.")
+    exit()
 
 def getQuadRuleInterval(n,L):
     """

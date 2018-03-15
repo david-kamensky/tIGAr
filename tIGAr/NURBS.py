@@ -8,6 +8,7 @@ leverages ``igakit`` to read in NURBS data in PetIGA's format.  The module
 from tIGAr.common import *
 from tIGAr.BSplines import *
 from igakit.io import PetIGA
+from igakit.nurbs import NURBS as NURBS_ik
 
 class NURBSControlMesh(AbstractControlMesh):
     """
@@ -17,13 +18,19 @@ class NURBSControlMesh(AbstractControlMesh):
         """
         Generates a NURBS control mesh from PetIGA geometry input data 
         (as generated, e.g., by a separate ``igakit`` script) in the 
-        file with name ``fname``.  The optional parameter ``useRect`` 
+        file with name ``fname``.  Alternatively, ``fname`` may be an 
+        ``igakit`` ``NURBS`` instance, for direct construction of the 
+        control mesh.  The optional parameter ``useRect`` 
         is a Boolean specifying whether or not to use rectangular FEs for 
         the extraction.
         """
 
-        # get an igakit nurbs object from the file
-        ikNURBS = PetIGA().read(fname)
+        # get an igakit nurbs object from the file (or, directly from an
+        # existing NURBS object)
+        if(isinstance(fname,NURBS_ik)):
+            ikNURBS = fname
+        else:
+            ikNURBS = PetIGA().read(fname)
 
         # create a BSpline scalar space given the knot vector(s)
         self.scalarSpline = BSpline(ikNURBS.degree,ikNURBS.knots,useRect)
