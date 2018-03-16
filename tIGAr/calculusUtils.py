@@ -286,8 +286,9 @@ def cartesianPushforwardN(u,F):
     The curl-conserving pushforward of ``u`` by mapping ``F`` (as might be
     used for a Nedelec elemeng, hence "N".
     """
-    DF = grad(F)
-    return inv(DF.T)*u
+    #DF = grad(F)
+    #return inv(DF.T)*u
+    return (pinvD(F).T)*u
 
 def cartesianPushforwardRT(v,F):
     """
@@ -295,16 +296,20 @@ def cartesianPushforwardRT(v,F):
     used for a Raviart--Thomas elemeng, hence "RT".
     """
     DF = grad(F)
-    return DF*v/det(DF)
-
+    #return DF*v/det(DF)
+    g = getMetric(F)
+    return DF*v/sqrt(det(g))
+    
 def cartesianPushforwardW(phi,F):
     """
     The mass-conserving pushforward of scalar field ``phi`` by mapping 
     ``F``.  ("W" comes from notation in J.A. Evans's dissertation.)
     """
-    DF = grad(F)
-    return phi/det(DF)
-
+    #DF = grad(F)
+    #return phi/det(DF)
+    g = getMetric(F)
+    return phi/sqrt(det(g))
+    
 # TODO: rename this to ScaledMeasure
 # I can't just scale a measure by a Jacobian, so I'll store them separately,
 # then overload __rmul__()

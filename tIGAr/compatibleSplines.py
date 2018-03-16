@@ -14,11 +14,14 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
     nvar = len(degrees)
     useRect = controlMesh.getScalarSpline().useRectangularElements()
     fields = []
+    # i indexes parametric components of the velocity (i.e., scalar fields)
     for i in range(0,nvar):
         knotVectors = []
         scalarDegrees = []
+        # j indexes parametric directions for building the tensor product
+        # space for field i
         for j in range(0,nvar):
-            degree = degrees[i]
+            degree = degrees[j]
             # different between RT and N: k-refine along (RT) or
             # perpendicular to (N) the vector direction
             if(((RTorN=="RT") and (j==i)) or ((RTorN=="N") and (not j==i))):
