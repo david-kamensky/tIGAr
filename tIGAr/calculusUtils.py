@@ -284,16 +284,20 @@ def cartesianCurl(f,F):
 def cartesianPushforwardN(u,F):
     """
     The curl-conserving pushforward of ``u`` by mapping ``F`` (as might be
-    used for a Nedelec elemeng, hence "N".
+    used for a Nedelec elemeng, hence "N").  This is only valid for 3D vector
+    fields on 3D domains.  
     """
-    #DF = grad(F)
-    #return inv(DF.T)*u
-    return (pinvD(F).T)*u
+    DF = grad(F)
+    return inv(DF.T)*u
+
+    # Since it only really makes sense to use this pushforward in 3D,
+    # the 2D-safe pseudo-inverse implementation is overkill.
+    #return (pinvD(F).T)*u
 
 def cartesianPushforwardRT(v,F):
     """
     The div-conserving pushforward of ``v`` by mapping ``F`` (as might be
-    used for a Raviart--Thomas elemeng, hence "RT".
+    used for a Raviart--Thomas elemeng, hence "RT").
     """
     DF = grad(F)
     #return DF*v/det(DF)

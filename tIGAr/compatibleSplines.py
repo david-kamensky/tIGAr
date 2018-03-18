@@ -1,3 +1,15 @@
+"""
+The ``compatibleSplines`` module
+--------------------------------
+contains functionality relating to div- and curl-conforming B-splines, as 
+originally developed by Buffa and collaborators:
+
+https://epubs.siam.org/doi/10.1137/100786708
+
+These spline spaces may be used with B-spline or NURBS control meshes to
+define the geometrical mapping from parametric to physical space.
+"""
+
 from tIGAr.common import *
 from tIGAr.BSplines import *
 import copy
@@ -5,12 +17,23 @@ from numpy import concatenate
 
 DEFAULT_RT_PENALTY = Constant(1e1)
 
-# may want to generate the corresponding scalar fields to append to
-# larger lists, in, e.g., monolithic pressure--velocity formulations, or
-# monolithic or partially-segregated MHD formulations.
-# due to similar code structure, combine RT and N generation; pass
-# RTorN = "RT" or "N".
 def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
+    """
+    This function generates a list of ``BSpline`` scalar bases corresponding
+    to the scalar components of either an RT-type or N-type compatible spline
+    discretization.  (See the dissertation of J.A. Evans for notation.)  The
+    argument ``controlMesh`` must refer to an instance of 
+    ``AbstractControlMesh`` whose underlying scalar spline is a ``BSpline``.
+    (This will provide the knot vectors to be used in constructing the 
+    compatible spline spaces.)  The argument ``RTorN`` is a string containing
+    either "RT" or "N", indicating the type of spline spaces to produce.
+    The argument ``degrees`` is a list of integers, indicating the polynomial 
+    degree in each parametric direction,
+    in the sense of "k'" from J.A. Evans's notation.  The optional argument
+    ``periodicities`` is a list of Booleans, and indicates whether or not 
+    the discretization is periodic in each direction.  
+    """
+    
     nvar = len(degrees)
     useRect = controlMesh.getScalarSpline().useRectangularElements()
     fields = []
@@ -43,8 +66,20 @@ def generateFieldsCompat(controlMesh,RTorN,degrees,periodicities=None):
 # can be RT or N type B-spline
 class BSplineCompat(AbstractMultiFieldSpline):
 
+    """
+    Class for generating extraction data for a compatible spline of type
+    RT or N when no other fields are required.
+    """
+    
     # args: controlMesh, RTorN, degrees, periodicities=None,
     def customSetup(self,args):
+        """
+        The first argument is an ``AbstractControlMesh``, the second is
+        a string containing "RT" or "N", the third is a list of polynomial
+        degrees in parametric directions, and the (optional) fourth is
+        a list of Booleans indicating periodicity along the parametric 
+        directions.
+        """
         self.controlMesh = args[0]
         self.RTorN = args[1]
         self.degrees = args[2]
@@ -64,21 +99,41 @@ class BSplineCompat(AbstractMultiFieldSpline):
     def getNFields(self):
         return len(self.fields)
 
-# spline with mixed space for just an RT velocity; assume that some sort of
-# iterated penalty type solver is used for the pressure, so there is no
-# pressure variable
 class ExtractedBSplineRT(ExtractedSpline):
-
+    """
+    Subclass of ``ExtractedSpline`` offering some specializations to the
+    case of an RT spline being used for solving problems on 
+    solenoidal subspaces.
+    """
+    
     def pushforward(self,uhat,F=None):
+        """
+        An RT-type pushforward of ``uhat``, assuming a mapping of ``spline.F``
+        or, optionally, some other ``F`` passed as an argument.
+        """
         if(F==None):
             F = self.F
         return cartesianPushforwardRT(uhat,F)
-    
-    # use the iterated penalty method to get a solenoidal RT velocity field u
-    # satisfying residualForm == 0.  v is the test function (couldn't find any
-    # way to get it directly from the form...)
-    def iteratedDivFreeSolve(self,residualForm,u,v,penalty=DEFAULT_RT_PENALTY):
 
+    # TODO: Think of a nice way to control whether the LHS form is
+    # re-assembled each iteration.
+    def iteratedDivFreeSolve(self,residualForm,u,v,penalty=DEFAULT_RT_PENALTY):
+        """
+        Use the iterated penalty method to find a solution to the 
+        problem given by ``residualForm``, while constraining the test and
+        trial functions (``u`` and ``v``) to solenoidal subspaces of 
+        ``spline.V``.  Making the ``penalty`` larger can speed up convergence,
+        at the cost of worse linear algebra conditioning.  For details and
+        analysis, see
+
+        https://epubs.siam.org/doi/10.1137/16M1103117
+
+        NOTE: This algorithm was developed for linear problems, but we also
+        apply it in an ad hoc manner to nonlinear problems, by essentially
+        performing one multiplier update per Newton step.  This appears to
+        be effective in practice.  
+        """
+        
         # augmented problem
         w = Function(self.V)
 
@@ -114,6 +169,11 @@ class ExtractedBSplineRT(ExtractedSpline):
             exit()
 
     def divFreeProject(self,toProject,penalty=DEFAULT_RT_PENALTY):
+        """
+        Project some expression ``toProject`` onto a solenoidal subspace of
+        ``spline.V``, using the iterated penalty method with an
+        optionally-specified ``penalty``.
+        """
         uhat = Function(self.V)
         vhat = TestFunction(self.V)
         u = self.pushforward(uhat)
@@ -123,15 +183,28 @@ class ExtractedBSplineRT(ExtractedSpline):
         return uhat
 
 class ExtractedBSplineN(ExtractedSpline):
+    """
+    Subclass of ``ExtractedSpline`` offering some specializations to the
+    case of an N-type spline being used as a vector potential.
+    """
 
     def pushforward(self,Ahat,F=None):
+        """
+        An N-type pushforward of vector potential ``Ahat``, using mapping
+        ``spline.F`` or, optionally, some other mapping ``F``.
+        """
         if(F==None):
             F = self.F
         return cartesianPushforwardN(Ahat,F)
 
-    # un-determined up to a gradient; need to use an appropriate iterative
-    # solver to get an answer
     def projectCurl(self,toProject,applyBCs=False):
+        """
+        Project ``toProject`` onto the curl of a vector potential in 
+        ``spline.V``.  
+
+        NOTE:  This is technically un-determined up to a gradient, but
+        some iterative solvers can still usually pick a solution.
+        """
         Ahat = TrialFunction(self.V)
         Bhat = TestFunction(self.V)
         u = self.curl(self.pushforward(Ahat))

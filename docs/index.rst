@@ -24,6 +24,9 @@ This document contains detailed information about the usage of functions, classe
 .. automodule:: tIGAr.RhinoTSplines
 	       :members:
 
+.. automodule:: tIGAr.compatibleSplines
+		:members:
+		  
 .. automodule:: tIGAr.calculusUtils
 	       :members:
 
