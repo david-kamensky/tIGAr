@@ -53,11 +53,12 @@ void basisFuncsInner(const Array<double> &ghostKnots,
                      const Array<double> &right,
                      const Array<double> &ders){
 
-    Array<double> *ghostKnotsp = &ghostKnots;
-    Array<double> *ndup = &ndu;
-    Array<double> *leftp = &left;
-    Array<double> *rightp = &right;
-    Array<double> *dersp = &ders;
+    // Technically results in un-defined behavior:
+    Array<double> *ghostKnotsp = const_cast<Array<double>*>(&ghostKnots);
+    Array<double> *ndup = const_cast<Array<double>*>(&ndu);
+    Array<double> *leftp = const_cast<Array<double>*>(&left);
+    Array<double> *rightp = const_cast<Array<double>*>(&right);
+    Array<double> *dersp = const_cast<Array<double>*>(&ders);
 
     int N = pl+1;
     (*ndup)[flatIndex(0,0,N)] = 1.0;
