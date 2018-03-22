@@ -117,14 +117,23 @@ class ExtractedBSplineRT(ExtractedSpline):
 
     # TODO: Think of a nice way to control whether the LHS form is
     # re-assembled each iteration.
-    def iteratedDivFreeSolve(self,residualForm,u,v,penalty=DEFAULT_RT_PENALTY):
+    def iteratedDivFreeSolve(self,residualForm,u,v,
+                             penalty=DEFAULT_RT_PENALTY,
+                             w=None):
         """
         Use the iterated penalty method to find a solution to the 
         problem given by ``residualForm``, while constraining the test and
         trial functions (``u`` and ``v``) to solenoidal subspaces of 
         ``spline.V``.  Making the ``penalty`` larger can speed up convergence,
-        at the cost of worse linear algebra conditioning.  For details and
-        analysis, see
+        at the cost of worse linear algebra conditioning.  The optional
+        parameter ``w`` allows for a nonzero initial guess for the 
+        pressure (in the form of a velocity function in the RT-type space
+        whose divergence serves as a pressure).  The idea is that, when time
+        stepping, the final ``w`` from the previous step  will be an accurate 
+        initial guess for the current step.  If nothing is passed ``w`` 
+        will be initialized to zero.  
+
+        For details and analysis of the iterated penalty method, see
 
         https://epubs.siam.org/doi/10.1137/16M1103117
 
@@ -135,7 +144,8 @@ class ExtractedBSplineRT(ExtractedSpline):
         """
         
         # augmented problem
-        w = Function(self.V)
+        if(w==None):
+            w = Function(self.V)
 
         # just penalize directly in parametric domain, because... why not?
         augmentation = penalty*div(u)*div(v)*self.dx \
@@ -143,6 +153,8 @@ class ExtractedBSplineRT(ExtractedSpline):
         residualFormAug = residualForm + augmentation
         JAug = derivative(residualFormAug,u)
 
+        # TODO: Think more about implementing separate tolerances for
+        # momentum and continuity residuals.
         converged = False
         for i in range(0,self.maxIters):
             MTAM,MTb = self.assembleLinearSystem(JAug,residualFormAug)

@@ -128,10 +128,13 @@ Du_Dt = udot + spline.grad(u)*u
 # The viscous part of the Cauchy stress:
 sigmaVisc = 2.0*VISC*eps(u)
 
-# The problem is posed on solenoidal subspace, as enforced by iterative penalty
-# solver; no pressure terms are necessary in the weak form.
+# The problem is posed on solenoidal subspace, as enforced by the iterative
+# penalty solver; no pressure terms are necessary in the weak form.
 res = DENS*inner(Du_Dt,v)*spline.dx \
       + inner(sigmaVisc,eps(v))*spline.dx
+
+# Auxilliary Function to re-use during the iterated penalty solves:
+w = Function(spline.V)
 
 # Time stepping loop:
 for i in range(0,N_STEPS):
@@ -141,13 +144,20 @@ for i in range(0,N_STEPS):
 
     # Solve for velocity in a solenoidal subspace of the RT-type
     # B-spline space.
-    spline.iteratedDivFreeSolve(res,u_hat,v_hat,penalty=Constant(1e4))
+    spline.iteratedDivFreeSolve(res,u_hat,v_hat,penalty=Constant(1e4),w=w)
 
     # Assemble the dissipation rate, and append it to a file that can be
     # straightforwardly plotted as a function of time using gnuplot.
     dissipationRate = assemble((2.0*VISC/DENS/pi**3)
                                *inner(eps(u),eps(u))*spline.dx)
+
+    # Because the algebraic problem is solved only approximately, there is some
+    # nonzero divergence to the velocity field.  If the tolerances are set
+    # small enough, this can be driven down to machine precision.  
+    divError = assemble(spline.div(u)**2*spline.dx)
+    
     if(mpirank==0):
+        print("Divergence error: "+str(divError))
         mode = "a"
         if(i==0):
             mode = "w"
