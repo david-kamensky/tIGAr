@@ -529,7 +529,7 @@ class ExtractedSpline(object):
         """
 
         if(isinstance(sourceArg,AbstractExtractionGenerator)):
-            self.initFromGenerator(sourceArg,quadDeg,mesh)
+            self.initFromGenerator(sourceArg,quadDeg,mesh,doPermutation)
         else:
             self.initFromFilesystem(sourceArg,quadDeg,mesh)
             
