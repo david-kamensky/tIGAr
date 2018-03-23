@@ -121,8 +121,8 @@ a0,a1,a2,deriv_a2,a,b = midsurfaceGeometry(x)
 # Generate a curvilinear basis from midsurface data at the through-thickness
 # coordinate xi3, based geometrical data from the midsurface.
 def curvilinearBasis(a0,a1,deriv_a2,xi3):
-    g0 = a0 + deriv_a2[:,0]
-    g1 = a1 + deriv_a2[:,1]
+    g0 = a0 + xi3*deriv_a2[:,0]
+    g1 = a1 + xi3*deriv_a2[:,1]
     return g0,g1
 
 # Generate a metric tensor at through-thickness coordinate xi3, based on the
