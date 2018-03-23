@@ -176,9 +176,9 @@ def psi_el(E):
 # constraint, given E in Cartesian coordinates.
 def p(E):
     E = variable(E)
-    dpis_el_dC = 0.5*diff(psi_el(E),E)
+    dpsi_el_dC = 0.5*diff(psi_el(E),E)
     C22 = 2.0*E[2,2] + 1.0
-    return 2.0*dpis_el_dC[2,2]*C22
+    return 2.0*dpsi_el_dC[2,2]*C22
 
 # Compute the total strain energy density, at coordinate xi^3 in the
 # through-thickness direction.
