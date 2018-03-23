@@ -511,7 +511,7 @@ class ExtractedSpline(object):
     extraction generators).  
     """
 
-    def __init__(self,sourceArg,quadDeg,mesh=None,doPermutation=True):
+    def __init__(self,sourceArg,quadDeg,mesh=None,doPermutation=False):
 
         """
         Generates instance from extraction data in ``sourceArg``, which
@@ -741,7 +741,7 @@ class ExtractedSpline(object):
             = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
         self.MT \
             = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
-        
+
         # geometrical mapping
         components = []
         for i in range(0,self.nsd):
