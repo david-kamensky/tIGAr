@@ -1060,6 +1060,7 @@ class ExtractedSpline(object):
             if(mpirank == 0):
                 print("Solver iteration: "+str(i)+" , Relative norm: "\
                       + str(relativeNorm))
+                sys.stdout.flush()
             if(currentNorm/initialNorm < self.relativeTolerance):
                 converged = True
                 break
