@@ -189,7 +189,6 @@ def psi(xi3):
     G0,G1 = curvilinearBasis(A0,A1,deriv_A2,xi3)
     E_2D = tensorToCartesian(E_flat,G,G0,G1)
     C_2D = 2.0*E_2D + Identity(2)
-    J_2D = sqrt(det(C_2D))
     C22 = 1.0/det(C_2D)
     E22 = 0.5*(C22-1.0)
     E = as_tensor([[E_2D[0,0], E_2D[0,1], 0.0],
