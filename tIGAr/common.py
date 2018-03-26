@@ -15,6 +15,7 @@ import math
 import numpy
 import abc
 from numpy import array
+from numpy import extract
 from scipy.stats import mode
 from numpy import argsort
 from numpy import zeros
@@ -1310,6 +1311,8 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
         partitionInts = zeros(nLocal,dtype=INDEX_TYPE)
         for i in arange(Istart,Iend):
             rowValues = MT.getRow(i)[0]
+            # isolate nonzero entries
+            rowValues = extract(rowValues>0,rowValues)
             iLocal = i - Istart
             modeValues = mode(rowValues)[0]
             if(len(modeValues) > 0):
