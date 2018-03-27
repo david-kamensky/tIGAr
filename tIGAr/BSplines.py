@@ -361,9 +361,10 @@ class BSpline(AbstractScalarBasis):
     def getNodesAndEvals(self,xi):
 
         if(self.nvar == 1):
-            span = self.splines[0].getKnotSpan(xi)
-            nodes = self.splines[0].getNodes(xi)
-            ders = self.splines[0].basisFuncs(span,xi)
+            u = xi[0]
+            span = self.splines[0].getKnotSpan(u)
+            nodes = self.splines[0].getNodes(u)
+            ders = self.splines[0].basisFuncs(span,u)
             retval = []
             for i in range(0,len(nodes)):
                 retval += [[nodes[i],ders[i]],]
