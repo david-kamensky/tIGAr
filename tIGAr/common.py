@@ -940,23 +940,38 @@ class ExtractedSpline(object):
         """
         return u/(self.cpFuncs[self.nsd])
 
-    def assembleLinearSystem(self,lhsForm,rhsForm,applyBCs=True):
+    def assembleVector(self,form,applyBCs=True):
         """
-        Assembles a linear system corresponding the LHS form ``lhsForm`` and
-        RHS form ``rhsForm``.  The optional argument ``applyBCs`` is a 
-        Boolean indicating whether or not to apply the spline's 
-        homogeneous Dirichlet BCs.
+        Assemble M^T*b, where ``form`` is a linear form and the Boolean
+        ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
         """
-        
-        A = PETScMatrix()
         b = PETScVector()
+        assemble(form, tensor=b)
 
-        assemble(lhsForm, tensor=A)
-        assemble(rhsForm, tensor=b)
+        # MT determines parallel partitioning of MTb
+        MTb = (self.MT)*b
 
-        #import time
-        #t0 = time.time()
-        
+        # apply zero bcs to MTAM and MTb
+        if(applyBCs):
+            as_backend_type(MTb).vec().setValues\
+                (self.zeroDofs,zeros(self.zeroDofs.getLocalSize()))
+            as_backend_type(MTb).vec().assemblyBegin()
+            as_backend_type(MTb).vec().assemblyEnd()
+
+        return MTb
+
+    def assembleMatrix(self,form,applyBCs=True,diag=1):
+        """
+        Assemble M^T*A*M, where ``form`` is a bilinear form and the Boolean
+        ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
+        The optional argument ``diag`` is what will be filled into diagonal
+        entries where Dirichlet BCs are applied.  For eigenvalue problems,
+        it can be useful to have non-default ``diag``, to move eigenvalues
+        corresponding to the Dirichlet BCs.
+        """
+        A = PETScMatrix()
+        assemble(form, tensor=A)
+
         Am = as_backend_type(A).mat()
         MTm = as_backend_type(self.MT).mat()
         MTAm = MTm.matMult(Am)
@@ -964,29 +979,53 @@ class ExtractedSpline(object):
         MTAMm = MTAm.matMult(Mm)
         MTAM = PETScMatrix(MTAMm)
 
-        # MT determines parallel partitioning of MTb
-        MTb = (self.MT)*b
-        #U = u.vector()
+        # apply zero bcs to MTAM and MTb
+        # (default behavior is to set diag=1, as desired)
+        as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs,diag)
+        as_backend_type(MTAM).mat().assemblyBegin()
+        as_backend_type(MTAM).mat().assemblyEnd()
 
-        #t1 = time.time()
-
-        #if(mpirank == 0):
-        #    print("Time = ",t1-t0)
+        return MTAM
         
-        #print MTAM.array()
-        #exit()
+    
+    def assembleLinearSystem(self,lhsForm,rhsForm,applyBCs=True):
+        """
+        Assembles a linear system corresponding the LHS form ``lhsForm`` and
+        RHS form ``rhsForm``.  The optional argument ``applyBCs`` is a 
+        Boolean indicating whether or not to apply the spline's 
+        homogeneous Dirichlet BCs.
+        """
+
+        return (self.assembleMatrix(lhsForm,applyBCs),
+                self.assembleVector(rhsForm,applyBCs))
+        
+        #A = PETScMatrix()
+        #b = PETScVector()
+
+        #assemble(lhsForm, tensor=A)
+        #assemble(rhsForm, tensor=b)
+        
+        #Am = as_backend_type(A).mat()
+        #MTm = as_backend_type(self.MT).mat()
+        #MTAm = MTm.matMult(Am)
+        #Mm = as_backend_type(self.M).mat()
+        #MTAMm = MTAm.matMult(Mm)
+        #MTAM = PETScMatrix(MTAMm)
+
+        # MT determines parallel partitioning of MTb
+        #MTb = (self.MT)*b
 
         # apply zero bcs to MTAM and MTb
         # (default behavior is to set diag=1, as desired)
-        as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs)
-        as_backend_type(MTb).vec().setValues\
-            (self.zeroDofs,zeros(self.zeroDofs.getLocalSize()))
-        as_backend_type(MTAM).mat().assemblyBegin()
-        as_backend_type(MTAM).mat().assemblyEnd()
-        as_backend_type(MTb).vec().assemblyBegin()
-        as_backend_type(MTb).vec().assemblyEnd()
+        #as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs)
+        #as_backend_type(MTb).vec().setValues\
+        #    (self.zeroDofs,zeros(self.zeroDofs.getLocalSize()))
+        #as_backend_type(MTAM).mat().assemblyBegin()
+        #as_backend_type(MTAM).mat().assemblyEnd()
+        #as_backend_type(MTb).vec().assemblyBegin()
+        #as_backend_type(MTb).vec().assemblyEnd()
 
-        return (MTAM,MTb)
+        #return (MTAM,MTb)
 
     def solveLinearSystem(self,MTAM,MTb,u):
         """
