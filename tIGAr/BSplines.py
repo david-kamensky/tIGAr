@@ -355,7 +355,8 @@ class BSpline(AbstractScalarBasis):
             #
             # TODO: find a way to automatically ignore those extra nearly-zero
             # basis functions.
-            totalFuncs *= (spline.p+1 +2)
+            #totalFuncs *= (spline.p+1 +2)
+            totalFuncs *= (spline.p+1)
         return totalFuncs
     
     def getNodesAndEvals(self,xi):

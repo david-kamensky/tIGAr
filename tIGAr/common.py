@@ -39,6 +39,10 @@ INDEX_TYPE = 'int32'
 #DEFAULT_PREALLOC = 100
 DEFAULT_PREALLOC = 500
 
+# basis function evaluations less than this will be considered outside the
+# function's support
+DEFAULT_BASIS_FUNC_IGNORE_EPS = 1e-9
+
 # file naming conventions
 EXTRACTION_DATA_FILE = "extraction-data.h5"
 EXTRACTION_INFO_FILE = "extraction-info.txt"
@@ -52,9 +56,8 @@ EXTRACTION_MAT_FILE = "extraction-mat.dat"
 EXTRACTION_MAT_FILE_CTRL = "extraction-mat-ctrl.dat"
 
 # DG space is more memory-hungry, but allows for $C^{-1}$-continuous splines,
-# e.g., for div-conforming VMS; maybe add mechanism later to choose this
-# automatically, based on spline, w/ option for manual override.
-#EXTRACTION_ELEMENT = "Lagrange"
+# e.g., for div-conforming VMS, and will still work for more continuous
+# spaces.  Right now, it is not supported for quad/hex elements.
 USE_DG_DEFAULT = True
 
 # whether or not to use tensor product elements by default
@@ -229,6 +232,15 @@ class AbstractExtractionGenerator(object):
         subclasses.
         """
         return DEFAULT_PREALLOC
+
+    def getIgnoreEps(self):
+        """
+        Returns an absolute value below which basis function evaluations are
+        considered to be outside of the function's support.  
+
+        This method is very unlikely to require overriding in subclasses.
+        """
+        return DEFAULT_BASIS_FUNC_IGNORE_EPS
     
     @abc.abstractmethod
     def generateM_control(self):
@@ -1220,7 +1232,8 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
             #MPETSc.setValues(rows,cols,values,addv=PETSc.InsertMode.INSERT)
             
             for i in range(0,len(nodesAndEvals)):
-                MPETSc[matRow,nodesAndEvals[i][0]] = nodesAndEvals[i][1]
+                if(abs(nodesAndEvals[i][1]) > self.getIgnoreEps()):
+                    MPETSc[matRow,nodesAndEvals[i][0]] = nodesAndEvals[i][1]
 
         MPETSc.assemblyBegin()
         MPETSc.assemblyEnd()
@@ -1280,8 +1293,9 @@ class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
                 for i in range(0,len(nodesAndEvals)):
                     # Ideally, would use globalDof here for consistency,
                     # but it is not very efficient as implemented
-                    MPETSc[matRow,nodesAndEvals[i][0]+offset]\
-                        = nodesAndEvals[i][1]
+                    if(abs(nodesAndEvals[i][1]) > self.getIgnoreEps()):
+                        MPETSc[matRow,nodesAndEvals[i][0]+offset]\
+                            = nodesAndEvals[i][1]
                 
             offset += self.getNcp(field)
             
