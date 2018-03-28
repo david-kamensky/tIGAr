@@ -82,7 +82,7 @@ for n in range(0,N_MODES):
     # real, so we are passing the dummy placeholder _ for the complex parts
     # of the eigenvalue and mode.
     omega2, _, uVectorIGA, _ = solver.get_eigenpair(n)
-    print("omega_"+str(n)+"= "+str(math.sqrt(abs(omega2))))
+    print("omega_"+str(n)+" = "+str(math.sqrt(abs(omega2))))
 
     # The solution from the eigensolver is a vector of IGA DoFs, and must be
     # extracted back to an FE representation for plotting.
