@@ -63,6 +63,27 @@ USE_DG_DEFAULT = True
 # whether or not to use tensor product elements by default
 USE_RECT_ELEM_DEFAULT = True
 
+# whether or not to explicitly form M^T (memory vs. speed tradeoff)
+# TODO: check whether PtAP available in typical setup's version of petsc4py;
+# leaving default as True until i do that.
+FORM_MT = True #False
+
+# helper function to do MatMultTranspose() without all the setup steps for the
+# results vector
+def multTranspose(M,b):
+    """
+    Returns ``M^T*b``, where ``M`` and ``b`` are DOLFIN ``GenericTensor`` and
+    ``GenericVector`` objects.
+    """
+    totalDofs = as_backend_type(M).mat().getSizes()[1][1]
+    MTbv = PETSc.Vec()
+    MTbv.create()
+    MTbv.setUp()
+    MTbv.setSizes(totalDofs)
+    as_backend_type(M).mat().multTranspose(as_backend_type(b).vec(),MTbv)
+    return PETScVector(MTbv)
+
+
 # helper function to generate an identity permutation IS 
 # given an ownership range
 def generateIdentityPermutation(ownRange):
@@ -296,13 +317,17 @@ class AbstractExtractionGenerator(object):
         self.M = self.generateM()        
 
         # get transpose
-        MT_control = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
-        #MT = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
+        if(FORM_MT):
+            MT_control = PETScMatrix(self.M_control.mat()
+                                     .transpose(PETSc.Mat()))
 
         # generating CPs, weights in spline space:
         # (control net never permuted)
         for i in range(0,self.nsd+1):
-            MTC = MT_control*(self.cpFuncs[i].vector())
+            if(FORM_MT):
+                MTC = MT_control*(self.cpFuncs[i].vector())
+            else:
+                MTC = multTranspose(self.M_control,self.cpFuncs[i].vector())
             Istart, Iend = as_backend_type(MTC).vec().getOwnershipRange()
             for I in arange(Istart, Iend):
                 as_backend_type(MTC).vec()[I] \
@@ -750,10 +775,11 @@ class ExtractedSpline(object):
             = MeshFunctionSizet(self.mesh,self.mesh.topology().dim()-1,0)
         
         # caching transposes of extraction matrices
-        self.MT_control \
-            = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
-        self.MT \
-            = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
+        if(FORM_MT):
+            self.MT_control \
+                = PETScMatrix(self.M_control.mat().transpose(PETSc.Mat()))
+            self.MT \
+                = PETScMatrix(self.M.mat().transpose(PETSc.Mat()))
 
         # geometrical mapping
         components = []
@@ -961,7 +987,10 @@ class ExtractedSpline(object):
         assemble(form, tensor=b)
 
         # MT determines parallel partitioning of MTb
-        MTb = (self.MT)*b
+        if(FORM_MT):
+            MTb = (self.MT)*b
+        else:
+            MTb = multTranspose(self.M,b)
 
         # apply zero bcs to MTAM and MTb
         if(applyBCs):
@@ -984,12 +1013,18 @@ class ExtractedSpline(object):
         A = PETScMatrix()
         assemble(form, tensor=A)
 
-        Am = as_backend_type(A).mat()
-        MTm = as_backend_type(self.MT).mat()
-        MTAm = MTm.matMult(Am)
-        Mm = as_backend_type(self.M).mat()
-        MTAMm = MTAm.matMult(Mm)
-        MTAM = PETScMatrix(MTAMm)
+        if(FORM_MT):
+            Am = as_backend_type(A).mat()
+            MTm = as_backend_type(self.MT).mat()
+            MTAm = MTm.matMult(Am)
+            Mm = as_backend_type(self.M).mat()
+            MTAMm = MTAm.matMult(Mm)
+            MTAM = PETScMatrix(MTAMm)
+        else:
+            # Needs recent version of petsc4py; is this standard for FEniCS
+            # docker containers?
+            MTAM = PETScMatrix(as_backend_type(A).mat()
+                               .PtAP(as_backend_type(self.M).mat()))
 
         # apply zero bcs to MTAM and MTb
         # (default behavior is to set diag=1, as desired)
@@ -1008,37 +1043,11 @@ class ExtractedSpline(object):
         homogeneous Dirichlet BCs.
         """
 
+        # really an unnecessary function now that i split out the
+        # vector and matrix assembly...
         return (self.assembleMatrix(lhsForm,applyBCs),
                 self.assembleVector(rhsForm,applyBCs))
         
-        #A = PETScMatrix()
-        #b = PETScVector()
-
-        #assemble(lhsForm, tensor=A)
-        #assemble(rhsForm, tensor=b)
-        
-        #Am = as_backend_type(A).mat()
-        #MTm = as_backend_type(self.MT).mat()
-        #MTAm = MTm.matMult(Am)
-        #Mm = as_backend_type(self.M).mat()
-        #MTAMm = MTAm.matMult(Mm)
-        #MTAM = PETScMatrix(MTAMm)
-
-        # MT determines parallel partitioning of MTb
-        #MTb = (self.MT)*b
-
-        # apply zero bcs to MTAM and MTb
-        # (default behavior is to set diag=1, as desired)
-        #as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs)
-        #as_backend_type(MTb).vec().setValues\
-        #    (self.zeroDofs,zeros(self.zeroDofs.getLocalSize()))
-        #as_backend_type(MTAM).mat().assemblyBegin()
-        #as_backend_type(MTAM).mat().assemblyEnd()
-        #as_backend_type(MTb).vec().assemblyBegin()
-        #as_backend_type(MTb).vec().assemblyEnd()
-
-        #return (MTAM,MTb)
-
     def solveLinearSystem(self,MTAM,MTb,u):
         """
         Solves a linear system of the form
@@ -1053,7 +1062,10 @@ class ExtractedSpline(object):
         """
         
         U = u.vector()
-        MTU = (self.MT)*U
+        if(FORM_MT):
+            MTU = (self.MT)*U
+        else:
+            MTU = multTranspose(self.M,U)
         if(self.linearSolver == None):
             solve(MTAM,MTU,MTb)
         else:
