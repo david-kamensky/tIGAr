@@ -64,9 +64,7 @@ USE_DG_DEFAULT = True
 USE_RECT_ELEM_DEFAULT = True
 
 # whether or not to explicitly form M^T (memory vs. speed tradeoff)
-# TODO: check whether PtAP available in typical setup's version of petsc4py;
-# leaving default as True until i do that.
-FORM_MT = True #False
+FORM_MT = False
 
 # helper function to do MatMultTranspose() without all the setup steps for the
 # results vector
@@ -1021,8 +1019,9 @@ class ExtractedSpline(object):
             MTAMm = MTAm.matMult(Mm)
             MTAM = PETScMatrix(MTAMm)
         else:
-            # Needs recent version of petsc4py; is this standard for FEniCS
-            # docker containers?
+            # Needs recent version of petsc4py; seems to be standard version
+            # used in docker container, though, since this function works
+            # fine on stampede.
             MTAM = PETScMatrix(as_backend_type(A).mat()
                                .PtAP(as_backend_type(self.M).mat()))
 
