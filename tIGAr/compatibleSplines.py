@@ -182,18 +182,21 @@ class ExtractedBSplineRT(ExtractedSpline):
             print("ERROR: Iterated penalty solver failed to converge.")
             exit()
 
-    def divFreeProject(self,toProject,penalty=DEFAULT_RT_PENALTY):
+    def divFreeProject(self,toProject,penalty=DEFAULT_RT_PENALTY,w=None):
         """
         Project some expression ``toProject`` onto a solenoidal subspace of
         ``spline.V``, using the iterated penalty method with an
-        optionally-specified ``penalty``.
+        optionally-specified ``penalty``.  The optional parameter ``w`` 
+        is a ``Function`` that can contain an initial guess for (and/or 
+        provide the final value of) the pressure associated with the 
+        projection.
         """
         uhat = Function(self.V)
         vhat = TestFunction(self.V)
         u = self.pushforward(uhat)
         v = self.pushforward(vhat)
         res = inner(u-toProject,v)*self.dx
-        self.iteratedDivFreeSolve(res,uhat,vhat,penalty)
+        self.iteratedDivFreeSolve(res,uhat,vhat,penalty,w)
         return uhat
 
 class ExtractedBSplineN(ExtractedSpline):
