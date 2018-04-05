@@ -84,7 +84,10 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
         self.ncp = int(lines[1].split()[1])
         self.nelBez = int(lines[2].split()[1])
 
-        lineCounter = 4+self.ncp
+        # Changed for true format
+        #lineCounter = 4+self.ncp
+        lineCounter = 3+self.ncp
+        
         self.extractionOperators = []
         self.extractionNodes = []
         for i in range(0,self.nelBez):
@@ -247,12 +250,14 @@ class RhinoTSplineControlMesh(AbstractControlMesh):
         fs = f.read()
         f.close()
 
-        # TODO: check w/ ming-chen/fei to see what the true Rhino format is
         lines = fs.split("\n")
         nnode = self.scalarSpline.getNcp()
         self.bnet = zeros((nnode,self.nsd+1))
         for i in range(0,nnode):
-            ii = i + 4
+            # for manually-modified format
+            #ii = i + 4
+            # for files directly from rhino
+            ii = i + 3
             coordStrs = lines[ii].split()
             for j in range(0,self.nsd+1):
                 self.bnet[i,j] = float(coordStrs[j+1])
