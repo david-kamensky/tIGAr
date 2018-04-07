@@ -90,8 +90,11 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
         
         self.extractionOperators = []
         self.extractionNodes = []
+        self.maxNshl = 0
         for i in range(0,self.nelBez):
             nshl = int(lines[lineCounter].split()[1])
+            if(nshl > self.maxNshl):
+                self.maxNshl = nshl
             nodeStrings = lines[lineCounter+1].split()
             nodes = []
             for ns in nodeStrings:
@@ -112,6 +115,9 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
     #def getParametricDimension(self):
     #    return self.nvar
 
+    def getPrealloc(self):
+        return self.maxNshl
+    
     def useRectangularElements(self):
         return self.useRect
 
