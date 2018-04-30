@@ -70,6 +70,10 @@ def surfaceJacobian(g,N):
     """
     Returns the surface element associated with the metric ``g``, for a surface
     oriented in the direction given by unit vector ``N``.
+
+    Note:  In version 2017.2, nontrivial boundary integrals produce 
+    incorrect results with quad/hex elements.  Use of this in boundary 
+    integrals is only robust with simplices.  
     """
     return sqrt(det(g)*inner(N,inv(g)*N))
 
@@ -252,12 +256,13 @@ def cartesianGrad(f,F):
     coordinates, assuming the parametric domain has been mapped to its
     physical configuration by the mapping ``F``.
     """
-    n = rank(f)
-    ii = indices(n+2)
-    pinvDF = pinvD(F)
-    return as_tensor(grad(f)[ii[0:n+1]]\
-                     *pinvDF[ii[n],ii[n+1]],\
-                     ii[0:n]+(ii[n+1],))
+    return dot(grad(f),pinvD(F))
+    #n = rank(f)
+    #ii = indices(n+2)
+    #pinvDF = pinvD(F)
+    #return as_tensor(grad(f)[ii[0:n+1]]\
+    #                 *pinvDF[ii[n],ii[n+1]],\
+    #                 ii[0:n]+(ii[n+1],))
 
 def cartesianDiv(f,F):
     """
@@ -324,6 +329,9 @@ class tIGArMeasure:
     then be used conveniently, like a weighted measure.  This class is a 
     way to circumvent that, by storing the weight and measure separately,
     and combining them only once right-multiplied by something else.
+
+    NOTE: Attempting to use subdomain data with the class currently
+    behaves erratically.
     """
     
     # if quadDeg==None, then this works if meas is a FEniCS measure, OR if
@@ -350,6 +358,14 @@ class tIGArMeasure:
         self.meas = meas
         self.J = J
 
+    def setMarkers(self,markers):
+        """
+        Sets the ``subdomain_data`` attribute of ``self.meas`` to 
+        ``markers``.  
+        """
+        self.meas = self.meas(subdomain_data=markers)
+        
+        
     # TODO: should probably change name of argument so that the measure
     # can be called exactly like spline.dx(subdomain_data=...)
     def __call__(self,marker):
