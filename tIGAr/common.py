@@ -39,6 +39,13 @@ INDEX_TYPE = 'int32'
 #DEFAULT_PREALLOC = 100
 DEFAULT_PREALLOC = 500
 
+# Choose default behavior for permutation of indices based on the number
+# of MPI tasks
+if(mpisize > 8):
+    DEFAULT_DO_PERMUTATION = True
+else:
+    DEFAULT_DO_PERMUTATION = False
+    
 # basis function evaluations less than this will be considered outside the
 # function's support
 DEFAULT_BASIS_FUNC_IGNORE_EPS = 1e-9
@@ -390,7 +397,7 @@ class AbstractExtractionGenerator(object):
             self.zeroDofs = self.permutationAO.app2petsc\
                             (zeroDofIS).getIndices()
     
-    def writeExtraction(self,dirname,doPermutation=True):
+    def writeExtraction(self,dirname,doPermutation=DEFAULT_DO_PERMUTATION):
         """
         Writes all extraction data to files in a directory named 
         ``dirname``.  The optional argument ``doPermutation`` is a Boolean
@@ -547,8 +554,8 @@ class ExtractedSpline(object):
     extraction generators).  
     """
 
-    def __init__(self,sourceArg,quadDeg,mesh=None,doPermutation=False):
-
+    def __init__(self,sourceArg,quadDeg,mesh=None,
+                 doPermutation=DEFAULT_DO_PERMUTATION):
         """
         Generates instance from extraction data in ``sourceArg``, which
         might either be an ``AbstractExtractionGenerator`` or the name of
@@ -573,7 +580,7 @@ class ExtractedSpline(object):
             
 
     def initFromGenerator(self,generator,quadDeg,mesh=None,
-                          doPermutation=True):
+                          doPermutation=DEFAULT_DO_PERMUTATION):
         """
         Generates instance from an ``AbstractExtractionGenerator``, without
         passing through the filesystem.  This mainly exists to circumvent
