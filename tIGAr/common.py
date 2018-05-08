@@ -1034,7 +1034,8 @@ class ExtractedSpline(object):
 
         # apply zero bcs to MTAM and MTb
         # (default behavior is to set diag=1, as desired)
-        as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs,diag)
+        if(applyBCs):
+            as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs,diag)
         as_backend_type(MTAM).mat().assemblyBegin()
         as_backend_type(MTAM).mat().assemblyEnd()
 
