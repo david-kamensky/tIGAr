@@ -119,16 +119,16 @@ A0,A1,A2,deriv_A2,A,B = midsurfaceGeometry(X)
 a0,a1,a2,deriv_a2,a,b = midsurfaceGeometry(x)
 
 # Generate a curvilinear basis from midsurface data at the through-thickness
-# coordinate xi3, based geometrical data from the midsurface.
-def curvilinearBasis(a0,a1,deriv_a2,xi3):
-    g0 = a0 + xi3*deriv_a2[:,0]
-    g1 = a1 + xi3*deriv_a2[:,1]
+# coordinate xi2, based geometrical data from the midsurface.
+def curvilinearBasis(a0,a1,deriv_a2,xi2):
+    g0 = a0 + xi2*deriv_a2[:,0]
+    g1 = a1 + xi2*deriv_a2[:,1]
     return g0,g1
 
-# Generate a metric tensor at through-thickness coordinate xi3, based on the
+# Generate a metric tensor at through-thickness coordinate xi2, based on the
 # midsurface metric and curvature.  
-def metric(a,b,xi3):
-    return a + 2.0*xi3*b
+def metric(a,b,xi2):
+    return a + 2.0*xi2*b
 
 # Obtain a local Cartesian basis, given a curvilinear basis a0, a1.
 def localCartesianBasis(a0,a1):
@@ -182,11 +182,11 @@ def p(E):
 
 # Compute the total strain energy density, at coordinate xi^3 in the
 # through-thickness direction.
-def psi(xi3):
-    G = metric(A,B,xi3)
-    g = metric(a,b,xi3)
+def psi(xi2):
+    G = metric(A,B,xi2)
+    g = metric(a,b,xi2)
     E_flat = 0.5*(g - G)
-    G0,G1 = curvilinearBasis(A0,A1,deriv_A2,xi3)
+    G0,G1 = curvilinearBasis(A0,A1,deriv_A2,xi2)
     E_2D = tensorToCartesian(E_flat,G,G0,G1)
     C_2D = 2.0*E_2D + Identity(2)
     C22 = 1.0/det(C_2D)
@@ -204,12 +204,12 @@ h_th = Constant(0.03)
 
 # Obtain a quadrature rule for numerical through-thickness integration:
 N_QUAD_PTS = 4
-xi3, w = getQuadRuleInterval(N_QUAD_PTS,h_th)
+xi2, w = getQuadRuleInterval(N_QUAD_PTS,h_th)
 
 # Define the numerically-integrated energy:
 energySurfaceDensity = 0.0
 for i in range(0,N_QUAD_PTS):
-    energySurfaceDensity += psi(xi3[i])*w[i]
+    energySurfaceDensity += psi(xi2[i])*w[i]
 
 # The total elastic potential energy:
 Wint = energySurfaceDensity*spline.dx
