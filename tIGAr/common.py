@@ -983,14 +983,12 @@ class ExtractedSpline(object):
         """
         return u/(self.cpFuncs[self.nsd])
 
-    def assembleVector(self,form,applyBCs=True):
+    # split out to implement contact
+    def extractVector(self,b,applyBCs=True):
         """
-        Assemble M^T*b, where ``form`` is a linear form and the Boolean
-        ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
+        Apply extraction to an FE vector ``b``.  The Boolean ``applyBCs`` 
+        indicates whether or not to apply BCs to the vector.
         """
-        b = PETScVector()
-        assemble(form, tensor=b)
-
         # MT determines parallel partitioning of MTb
         if(FORM_MT):
             MTb = (self.MT)*b
@@ -1005,19 +1003,27 @@ class ExtractedSpline(object):
             as_backend_type(MTb).vec().assemblyEnd()
 
         return MTb
-
-    def assembleMatrix(self,form,applyBCs=True,diag=1):
+    
+    def assembleVector(self,form,applyBCs=True):
         """
-        Assemble M^T*A*M, where ``form`` is a bilinear form and the Boolean
+        Assemble M^T*b, where ``form`` is a linear form and the Boolean
         ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
-        The optional argument ``diag`` is what will be filled into diagonal
-        entries where Dirichlet BCs are applied.  For eigenvalue problems,
-        it can be useful to have non-default ``diag``, to move eigenvalues
-        corresponding to the Dirichlet BCs.
         """
-        A = PETScMatrix()
-        assemble(form, tensor=A)
+        b = PETScVector()
+        assemble(form, tensor=b)
 
+        MTb = self.extractVector(b,applyBCs=applyBCs)
+
+        return MTb
+
+    # split out to implement contact
+    def extractMatrix(self,A,applyBCs=True,diag=1):
+        """
+        Apply extraction to an FE matrix ``A``.  The Boolean ``applyBCs``
+        indicates whether or not to apply BCs to the matrix, and the 
+        optional argument ``diag`` is what will be filled into diagonal
+        entries where Dirichlet BCs are applied.
+        """
         if(FORM_MT):
             Am = as_backend_type(A).mat()
             MTm = as_backend_type(self.MT).mat()
@@ -1038,6 +1044,22 @@ class ExtractedSpline(object):
             as_backend_type(MTAM).mat().zeroRowsColumns(self.zeroDofs,diag)
         as_backend_type(MTAM).mat().assemblyBegin()
         as_backend_type(MTAM).mat().assemblyEnd()
+
+        return MTAM
+    
+    def assembleMatrix(self,form,applyBCs=True,diag=1):
+        """
+        Assemble M^T*A*M, where ``form`` is a bilinear form and the Boolean
+        ``applyBCs`` indicates whether or not to apply the Dirichlet BCs.
+        The optional argument ``diag`` is what will be filled into diagonal
+        entries where Dirichlet BCs are applied.  For eigenvalue problems,
+        it can be useful to have non-default ``diag``, to move eigenvalues
+        corresponding to the Dirichlet BCs.
+        """
+        A = PETScMatrix()
+        assemble(form, tensor=A)
+
+        MTAM = self.extractMatrix(A,applyBCs=applyBCs,diag=diag)
 
         return MTAM
         
@@ -1460,6 +1482,11 @@ class AbstractScalarBasis(object):
         """
         return
 
+    # TODO: get rid of the DG stuff in coordinate chart splines, since
+    # getNodesAndEvals() is inherently unstable for discontinuous functions
+    # and some other instantiation of AbstractExtractionGenerator
+    # is needed to reliably handle $C^{-1}$ splines.
+    
     #@abc.abstractmethod
     # assume DG unless this is overridden by a subclass (as DG will work even
     # if CG is okay (once they fix DG for quads/hexes at least...))
