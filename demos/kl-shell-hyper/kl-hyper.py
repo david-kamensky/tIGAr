@@ -128,7 +128,7 @@ def curvilinearBasis(a0,a1,deriv_a2,xi2):
 # Generate a metric tensor at through-thickness coordinate xi2, based on the
 # midsurface metric and curvature.  
 def metric(a,b,xi2):
-    return a + 2.0*xi2*b
+    return a - 2.0*xi2*b
 
 # Obtain a local Cartesian basis, given a curvilinear basis a0, a1.
 def localCartesianBasis(a0,a1):
@@ -180,7 +180,7 @@ def p(E):
     C22 = 2.0*E[2,2] + 1.0
     return 2.0*dpsi_el_dC[2,2]*C22
 
-# Compute the total strain energy density, at coordinate xi^3 in the
+# Compute the total strain energy density, at coordinate xi^2 in the
 # through-thickness direction.
 def psi(xi2):
     G = metric(A,B,xi2)
