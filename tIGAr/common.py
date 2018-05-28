@@ -23,6 +23,8 @@ from numpy import full
 from numpy import transpose as npTranspose
 from numpy import arange
 
+import ufl.equation
+
 from dolfin import MPI, mpi_comm_world
 
 if(parameters.linear_algebra_backend != 'PETSc'):
@@ -1111,8 +1113,14 @@ class ExtractedSpline(object):
         Dirichlet BCs from ``self`` can be optionally applied, based on the
         Boolean parameter ``applyBCs``.
         """
-        lhsForm = lhs(residualForm)
-        rhsForm = rhs(residualForm)
+        
+        if(isinstance(residualForm,ufl.equation.Equation)):
+            lhsForm = residualForm.lhs
+            rhsForm = residualForm.rhs
+        else:
+            # TODO: Why is this so much slower?
+            lhsForm = lhs(residualForm)
+            rhsForm = rhs(residualForm)
 
         if(rhsForm.integrals() == ()):
             v = TestFunction(self.V)
@@ -1176,9 +1184,14 @@ class ExtractedSpline(object):
         u = TrialFunction(self.V_linear)
         v = TestFunction(self.V_linear)
         # don't bother w/ change of variables in integral
-        res = inner(u-toProject,v)*self.dx.meas
-        lhsForm = lhs(res)
-        rhsForm = rhs(res)
+        #res = inner(u-toProject,v)*self.dx.meas
+
+        # Note: for unclear reasons, extracting the lhs/rhs from the
+        # residual is both itself very slow, and also causes the assembly
+        # to become very slow.  
+        
+        lhsForm = inner(u,v)*self.dx.meas #lhs(res)
+        rhsForm = inner(toProject,v)*self.dx.meas #rhs(res)
         A = assemble(lhsForm)
         b = assemble(rhsForm)
         u = Function(self.V_linear)
@@ -1197,9 +1210,12 @@ class ExtractedSpline(object):
         v = TestFunction(self.V)
         u = self.rationalize(u)
         v = self.rationalize(v)
-        res = inner(u-toProject,v)*self.dx
+        #res = inner(u-toProject,v)*self.dx
+        lhsForm = inner(u,v)*self.dx
+        rhsForm = inner(toProject,v)*self.dx
         retval = Function(self.V)
-        self.solveLinearVariationalProblem(res,retval,applyBCs)
+        #self.solveLinearVariationalProblem(res,retval,applyBCs)
+        self.solveLinearVariationalProblem(lhsForm==rhsForm,retval,applyBCs)
         retval = self.rationalize(retval)
         return retval
         
