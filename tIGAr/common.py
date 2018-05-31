@@ -823,6 +823,7 @@ class ExtractedSpline(object):
         # linear space on mesh for projecting scalar fields onto
         self.VE_linear = FiniteElement("Lagrange",\
                                        self.mesh.ufl_cell(),1)
+
         #linearList = []
         #for i in range(0,self.nsd):
         #    linearList += [self.VE_linear,]
@@ -837,7 +838,6 @@ class ExtractedSpline(object):
         
         self.V_displacement = FunctionSpace(self.mesh,self.VE_displacement)
         self.V_linear = FunctionSpace(self.mesh,self.VE_linear)
-
         
     def interpolateAsDisplacement(self,functionList=[]):
 
@@ -1176,7 +1176,7 @@ class ExtractedSpline(object):
             exit()
 
     # project a scalar onto linears for plotting
-    def projectScalarOntoLinears(self,toProject):
+    def projectScalarOntoLinears(self,toProject,linearSolver=None):
         """
         L2 projection of some UFL object ``toProject`` onto a space of linear,
         scalar FE functions (typically used for plotting).
@@ -1195,9 +1195,14 @@ class ExtractedSpline(object):
         A = assemble(lhsForm)
         b = assemble(rhsForm)
         u = Function(self.V_linear)
-        solve(A,u.vector(),b)
+        #solve(A,u.vector(),b)
+        if(linearSolver == None):
+            solve(A,u.vector(),b)
+        else:
+            linearSolver.solve(A,u.vector(),b)
         return u
-            
+
+    
     # project something onto the solution space; ignore bcs by default
     def project(self,toProject,applyBCs=False):
         """
