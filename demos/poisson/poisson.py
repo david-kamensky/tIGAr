@@ -106,9 +106,10 @@ soln = sin(pi*(x[0]-x0)/Lx)*sin(pi*(x[1]-y0)/Ly)
 f = -spline.div(spline.grad(soln))
 
 # Set up and solve the Poisson problem
-res = inner(spline.grad(u),spline.grad(v))*spline.dx - inner(f,v)*spline.dx
+a = inner(spline.grad(u),spline.grad(v))*spline.dx
+L = inner(f,v)*spline.dx
 u = Function(spline.V)
-spline.solveLinearVariationalProblem(res,u)
+spline.solveLinearVariationalProblem(a==L,u)
 
 
 ####### Postprocessing #######

@@ -116,12 +116,13 @@ soln = sin(pi*x[0])*sin(pi*x[1])
 f = -spline.div(spline.grad(soln))
 
 # Set up and solve the Poisson problem
-res = inner(spline.grad(u),spline.grad(v))*spline.dx - inner(f,v)*spline.dx
+a = inner(spline.grad(u),spline.grad(v))*spline.dx
+L = inner(f,v)*spline.dx
 
 # FEniCS Function objects are always in the homogeneous representation; it
 # is a good idea to name variables in such a way as to recall this.
 u_homo = Function(spline.V)
-spline.solveLinearVariationalProblem(res,u_homo)
+spline.solveLinearVariationalProblem(a==L,u_homo)
 
 
 ####### Postprocessing #######
