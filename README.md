@@ -4,6 +4,7 @@ A Python library for isogeometric analysis (IGA) using FEniCS.  An article outli
 
 ## Dependencies
 * Any meaningful usage requires [FEniCS](https://fenicsproject.org/) (version 2017.2) and its dependencies.
+* [SciPy](https://www.scipy.org/) is required.  (SciPy is already included in FEniCS Docker distributions.)
 * Usage of the NURBS module requires [igakit](https://bitbucket.org/dalcinl/igakit).
 * Compiling the API documentation requires [Sphinx](http://www.sphinx-doc.org/en/master/).
 * The most convenient program for visualizing results is [ParaView](https://www.paraview.org/).

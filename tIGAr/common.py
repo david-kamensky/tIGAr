@@ -1227,7 +1227,7 @@ class ExtractedSpline(object):
 class AbstractCoordinateChartSpline(AbstractExtractionGenerator):
 
     """
-    This abstraction epresents a spline whose parametric 
+    This abstraction represents a spline whose parametric 
     coordinate system consists of a 
     using a single coordinate chart, so coordinates provide a unique set 
     of basis functions; this applies to single-patch B-splines, T-splines, 
