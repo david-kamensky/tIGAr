@@ -141,6 +141,8 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
     def generateMesh(self):
         # brute force approach: write out an xml file on mpi task zero, then
         # read it back in in parallel
+        #
+        # TODO: should figure out how to use DOLFIN MeshEditor for this
         if(mpirank == 0):
             fs = '<?xml version="1.0" encoding="UTF-8"?>' + "\n"
             fs += '<dolfin xmlns:dolfin="http://www.fenics.org/dolfin/">'+"\n"
@@ -172,7 +174,7 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
                     v1 = str(i*4+1)
                     v2 = str(i*4+2)
                     v3 = str(i*4+3)
-                    fs += '<triangle index="'+str(elCounter)\
+                    fs += '<quadrilateral index="'+str(elCounter)\
                           +'" v0="'+v0+'" v1="'+v1\
                           +'" v2="'+v2+'" v3="'+v3+'"/>'\
                           + "\n"
