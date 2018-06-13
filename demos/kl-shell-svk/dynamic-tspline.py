@@ -21,9 +21,10 @@ compute the contact potential, which is simply hard-coded.
 
 An archive with the required data file "sphere.iga" can be downloaded from 
 
-  TODO: Host file somewhere.
+  https://www.dropbox.com/s/8es3zj5dsdzjqim/sphere.iga.tgz?dl=1
 
-and extracted using the command "tar -xvzf sphere.iga.tgz".  
+and extracted using the command "tar -xvzf sphere.iga.tgz".  (Credit to Fei Xu
+for designing this geometry in Rhino 3D, using the T-spline plugin.)
 
 Note: Parallel computation with T-spline meshes works, but is not especially
 efficient, since the element-by-element extraction data in the Rhino 3D 
