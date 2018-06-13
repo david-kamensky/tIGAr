@@ -96,20 +96,20 @@ if(mpirank==0):
 #spline = ExtractedSpline(DIR,QUAD_DEG)
 
 # The unknown midsurface displacement
-y_homo = Function(spline.V) # in homogeneous coordinates
-y = spline.rationalize(y_homo) # in physical coordinates
+y_hom = Function(spline.V) # in homogeneous coordinates
+y = spline.rationalize(y_hom) # in physical coordinates
 
 # Quantities from the previous time step
-y_old_homo = Function(spline.V)
-ydot_old_homo = Function(spline.V)
-yddot_old_homo = Function(spline.V)
+y_old_hom = Function(spline.V)
+ydot_old_hom = Function(spline.V)
+yddot_old_hom = Function(spline.V)
 
 # Create a time integrator for the displacement.
 RHO_INF = Constant(0.5)
 DELTA_T = Constant(0.001)
-timeInt = GeneralizedAlphaIntegrator(RHO_INF,DELTA_T,y_homo,
-                                     (y_old_homo, ydot_old_homo,
-                                      yddot_old_homo))
+timeInt = GeneralizedAlphaIntegrator(RHO_INF,DELTA_T,y_hom,
+                                     (y_old_hom, ydot_old_hom,
+                                      yddot_old_hom))
 
 # Get alpha-level quantities for use in the formulation.  (These are linear
 # combinations of old and new quantities.  The time integrator assumes that
@@ -117,9 +117,6 @@ timeInt = GeneralizedAlphaIntegrator(RHO_INF,DELTA_T,y_homo,
 y_alpha = spline.rationalize(timeInt.x_alpha())
 ydot_alpha = spline.rationalize(timeInt.xdot_alpha())
 yddot_alpha = spline.rationalize(timeInt.xddot_alpha())
-
-# Allows for derivatives w.r.t. to y_alpha to be taken using diff():
-y_alpha = variable(y_alpha)
 
 # The reference configuration is the mapping from parametric coordinates to
 # physical space.
@@ -215,11 +212,11 @@ Wint = 0.5*(inner(voigt(epsilonBar),nBar)
 
 # Take the Gateaux derivative of Wint(y_alpha) in the direction of the test
 # function z to obtain the internal virtual work.  Because y_alpha is not
-# a valid argument to derivative(), we take the derivative w.r.t. y_homo
+# a valid argument to derivative(), we take the derivative w.r.t. y_hom
 # instead, then scale by $1/\alpha_f$.
-z_homo = TestFunction(spline.V)
-z = spline.rationalize(z_homo)
-dWint = Constant(1.0/timeInt.ALPHA_F)*derivative(Wint,y_homo,z_homo)
+z_hom = TestFunction(spline.V)
+z = spline.rationalize(z_hom)
+dWint = Constant(1.0/timeInt.ALPHA_F)*derivative(Wint,y_hom,z_hom)
 
 
 # Note that taking the derivative w.r.t. the homogeneous representation in
@@ -254,7 +251,7 @@ res = dWmass + dWint + dWext
 
 # Use derivative() to obtain the consistent tangent of the nonlinear residual,
 # considered as a function of displacement in homogeneous coordinates.
-dRes = derivative(res,y_homo)
+dRes = derivative(res,y_hom)
 
 # Apply an initial condition to the sphere's velocity.  
 timeInt.xdot_old.interpolate(Expression(("0.0","0.0","-10.0"),degree=1))
@@ -291,11 +288,11 @@ for i in range(0,50):
               +" , t = "+str(timeInt.t)+" -------")
 
     # Solve the nonlinear problem for this time step and put the solution
-    # (in homogeneous coordinates) in y_homo.
-    spline.solveNonlinearVariationalProblem(res,dRes,y_homo)
+    # (in homogeneous coordinates) in y_hom.
+    spline.solveNonlinearVariationalProblem(res,dRes,y_hom)
 
     # Output fields needed for visualization.
-    (d0,d1,d2) = y_homo.split()
+    (d0,d1,d2) = y_hom.split()
     d0.rename("d0","d0")
     d1.rename("d1","d1")
     d2.rename("d2","d2")

@@ -82,8 +82,8 @@ if(mpirank==0):
     print("Please be patient...")
     
 # Unknown midsurface displacement
-y_homo = Function(spline.V) # in homogeneous representation
-y = spline.rationalize(y_homo) # in physical coordinates
+y_hom = Function(spline.V) # in homogeneous representation
+y = spline.rationalize(y_hom) # in physical coordinates
 
 # Reference configuration:
 X = spline.F
@@ -214,10 +214,10 @@ for i in range(0,N_QUAD_PTS):
 # The total elastic potential energy:
 Wint = energySurfaceDensity*spline.dx
 
-# Take the Gateaux derivative of Wint in test function direction z_homo.
-z_homo = TestFunction(spline.V)
-z = spline.rationalize(z_homo)
-dWint = derivative(Wint,y_homo,z_homo)
+# Take the Gateaux derivative of Wint in test function direction z_hom.
+z_hom = TestFunction(spline.V)
+z = spline.rationalize(z_hom)
+dWint = derivative(Wint,y_hom,z_hom)
 
 # External follower load magnitude:
 PRESSURE = Constant(1e2)
@@ -234,7 +234,7 @@ dWext = -(PRESSURE*stepper.t)*sqrt(det(a)/det(A))*inner(a2,z)*spline.dx
 res = dWint + dWext
 
 # Consistent tangent:
-dRes = derivative(res,y_homo)
+dRes = derivative(res,y_hom)
 
 # Allow many nonlinear iterations.
 spline.maxIters = 100
@@ -253,13 +253,13 @@ for i in range(0,N_STEPS):
         print("------- Step: "+str(i+1)+" , t = "+str(stepper.tval)+" -------")
 
     # Execute nonlinear solve.
-    spline.solveNonlinearVariationalProblem(res,dRes,y_homo)
+    spline.solveNonlinearVariationalProblem(res,dRes,y_hom)
 
     # Advance to next load step.
     stepper.advance()
 
     # Output solution.
-    (d0,d1,d2) = y_homo.split()
+    (d0,d1,d2) = y_hom.split()
     d0.rename("d0","d0")
     d1.rename("d1","d1")
     d2.rename("d2","d2")

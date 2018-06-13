@@ -121,15 +121,15 @@ L = inner(f,v)*spline.dx
 
 # FEniCS Function objects are always in the homogeneous representation; it
 # is a good idea to name variables in such a way as to recall this.
-u_homo = Function(spline.V)
-spline.solveLinearVariationalProblem(a==L,u_homo)
+u_hom = Function(spline.V)
+spline.solveLinearVariationalProblem(a==L,u_hom)
 
 
 ####### Postprocessing #######
 
 # The solution, u, is in the homogeneous representation.
-u_homo.rename("u","u")
-File("results/u.pvd") << u_homo
+u_hom.rename("u","u")
+File("results/u.pvd") << u_hom
 
 # To visualize correctly in Paraview, we need the geometry information as well.
 nsd = 3
@@ -150,7 +150,7 @@ for i in range(0,nsd+1):
 #  in Paraview Calculator syntax, and the solution would be u/F3.
 
 # Compute and print the $L^2$ error in the discrete solution.
-L2_error = math.sqrt(assemble(((spline.rationalize(u_homo)-soln)**2)
+L2_error = math.sqrt(assemble(((spline.rationalize(u_hom)-soln)**2)
                               *spline.dx))
 
 if(mpirank==0):
