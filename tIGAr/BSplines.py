@@ -140,11 +140,31 @@ class BSpline1(object):
 
         # knot array with ghosts, for optimized access
         self.nGhost = self.p+1
-        self.ghostKnots = []
-        for i in range(-self.nGhost,len(self.knots)+self.nGhost):
-            self.ghostKnots += [self.getKnot(i),]
-        self.ghostKnots = array(self.ghostKnots)
+        #self.ghostKnots = []
+        #for i in range(-self.nGhost,len(self.knots)+self.nGhost):
+        #    self.ghostKnots += [self.getKnot(i),]
+        #self.ghostKnots = array(self.ghostKnots)
+        self.ghostKnots = self.computeGhostKnots()
 
+    def computeGhostKnots(self):
+        """
+        Pre-compute ghost knots and return as a numpy array.  (Primarily
+        intended for internal use.)
+        """
+        ghostKnots = []
+        for i in range(-self.nGhost,len(self.knots)+self.nGhost):
+            ghostKnots += [self.getKnot(i),]
+        return array(ghostKnots)
+        
+    def normalizeKnotVector(self):
+        """
+        Re-scales knot vector to be from 0 to 1.
+        """
+        L = self.knots[-1] - self.knots[0]
+        self.knots = (self.knots - self.knots[0])/L
+        self.uniqueKnots = (self.uniqueKnots - self.uniqueKnots[0])/L
+        self.ghostKnots = self.computeGhostKnots()
+        
     # if any non-end knot is repeated more than p time, then the B-spline
     # is discontinuous
     def isDiscontinuous(self):
@@ -166,7 +186,6 @@ class BSpline1(object):
             if(not near(self.knots[i],self.knots[i-1],\
                         eps=KNOT_NEAR_EPS)):
                 self.nel += 1
-
 
     def getKnot(self,i):
         """
@@ -195,7 +214,6 @@ class BSpline1(object):
             retval += self.getKnot(j+1)
         retval /= float(self.p)
         return retval
-
         
     def computeNcp(self):
         """
@@ -324,6 +342,16 @@ class BSpline(AbstractScalarBasis):
         self.useRect = useRect
 
         self.ncp = self.computeNcp()
+
+        self.nel = self.computeNel()
+        
+
+    def normalizeKnotVectors(self):
+        """
+        Scale knot vectors in all directions to (0,1).
+        """
+        for s in self.splines:
+            s.normalizeKnotVector()
         
     #def getParametricDimension(self):
     #    return self.nvar
@@ -494,6 +522,15 @@ class BSpline(AbstractScalarBasis):
                 deg += self.splines[i].p
         return deg
 
+    def computeNel(self):
+        """
+        Returns the number of Bezier elements in the B-spline.
+        """
+        nel = 1
+        for spline in self.splines:
+            nel *= spline.nel
+        return nel
+    
     def getSideDofs(self,direction,side,nLayers=1):
         """
         Return the DoFs on a ``side`` (zero or one) that is perpendicular 
@@ -546,6 +583,195 @@ class BSpline(AbstractScalarBasis):
                 continue
         return retval
                 
+class MultiBSpline(AbstractScalarBasis):
+    """
+    Several ``BSpline`` instances grouped together.
+    """
+
+    # TODO: add a mechanism to merge basis functions (analogous to IPER
+    # in the Fortran code) that can be used to merge control points for
+    # equal-order interpolations.  (Should be an integer array of length
+    # self.ncp, with mostly array[i]=i, except for slave nodes.)
+    
+    def __init__(self,splines):
+        """
+        Create a ``MultiBSpline`` from a sequence ``splines`` of individual
+        ``BSpline`` instances.  This sequence is assumed to contain at least
+        one ``BSpline``, and all elements of ``splines`` are assumed to use
+        the same element type, and have the same parametric 
+        dimensions as each other.
+        """
+        self.splines = splines
+        self.ncp = self.computeNcp()
+
+        # normalize all knot vectors to (0,1) for each patch, for easy lookup
+        # of patch index from coordinates
+        for s in self.splines:
+            s.normalizeKnotVectors()
+
+        # pre-compute DoF index offsets for each patch
+        self.doffsets = []
+        ncp = 0
+        for s in self.splines:
+            self.doffsets += [ncp,]
+            ncp += s.getNcp()
+
+        self.nvar = self.splines[0].nvar
+        self.useRect = self.splines[0].useRect
+        self.nPatch = len(self.splines)
+        self.nel = self.computeNel()
+
+    def computeNel(self):
+        """
+        Returns the number of Bezier elements between all patches.
+        """
+        nel = 0
+        for spline in self.splines:
+            nel += spline.nel
+        return nel
+        
+    # TODO: this should not need to exist
+    def needsDG(self):
+        return False
+
+    def useRectangularElements(self):
+        """
+        Returns a Boolean indicating whether or not the basis should use
+        rectangular elements in its extraction.
+        """
+        return self.useRect
+
+    # non-default implementation, optimized for B-splines
+    def getPrealloc(self):
+        return self.splines[0].getPrealloc()
+    
+    def getNodesAndEvals(self,xi):
+        patch = self.patchFromCoordinates(xi)
+        xi_local = self.localParametricCoordinates(xi,patch)
+        localNodesAndEvals = self.splines[patch].getNodesAndEvals(xi_local)
+        retval = []
+        for pair in localNodesAndEvals:
+            retval += [[self.globalDofIndex(pair[0],patch),pair[1]],]
+        return retval
+        
+    def patchFromCoordinates(self,xi):
+        return int(xi[0]+0.5)//2
+        
+    def globalDofIndex(self,localDofIndex,patchIndex):
+        return self.doffsets[patchIndex] + localDofIndex
+
+    def localParametricCoordinates(self,xi,patchIndex):
+        retval = xi.copy()
+        retval[0] = xi[0] - 2.0*float(patchIndex)
+        return retval
+
+    MESH_FILE_NAME = "mesh.xml"
+
+    def generateMesh(self):
+        if(mpirank == 0):
+            fs = '<?xml version="1.0" encoding="UTF-8"?>' + "\n"
+            fs += '<dolfin xmlns:dolfin="http://www.fenics.org/dolfin/">'+"\n"
+            if(self.nvar == 1):
+                # TODO
+                print("ERROR: Univariate multipatch not yet supported.")
+                exit()
+            elif(self.nvar == 2):
+                if(self.useRect):
+                    fs += '<mesh celltype="quadrilateral" dim="2">' + "\n"
+
+                    # TODO: Do indexing more intelligently, so that elements
+                    # are connected within each patch.
+                    
+                    nverts = 4*self.nel
+                    nel = self.nel
+                    fs += '<vertices size="'+str(nverts)+'">' + "\n"
+                    vertCounter = 0
+                    x00 = 0.0
+                    for patch in range(0,self.nPatch):
+                        spline = self.splines[patch]
+                        uspline = spline.splines[0]
+                        vspline = spline.splines[1]
+                        for i in range(0,uspline.nel):
+                            for j in range(0,vspline.nel):
+                                x0 = repr(x00+uspline.uniqueKnots[i])
+                                x1 = repr(x00+uspline.uniqueKnots[i+1])
+                                y0 = repr(vspline.uniqueKnots[j])
+                                y1 = repr(vspline.uniqueKnots[j+1])
+                                fs += '<vertex index="'+str(vertCounter)\
+                                      +'" x="'+x0+'" y="'+y0+'"/>' + "\n"
+                                fs += '<vertex index="'+str(vertCounter+1)\
+                                      +'" x="'+x1+'" y="'+y0+'"/>' + "\n"
+                                fs += '<vertex index="'+str(vertCounter+2)\
+                                      +'" x="'+x0+'" y="'+y1+'"/>' + "\n"
+                                fs += '<vertex index="'+str(vertCounter+3)\
+                                      +'" x="'+x1+'" y="'+y1+'"/>' + "\n"
+                                vertCounter += 4
+                        x00 += 2.0
+                    fs += '</vertices>' + "\n"
+                    fs += '<cells size="'+str(nel)+'">' + "\n"
+                    elCounter = 0
+                    for patch in range(0,self.nPatch):
+                        spline = self.splines[patch]
+                        uspline = spline.splines[0]
+                        vspline = spline.splines[1]
+                        for i in range(0,uspline.nel):
+                            for j in range(0,vspline.nel):
+                                v0 = str(elCounter*4+0)
+                                v1 = str(elCounter*4+1)
+                                v2 = str(elCounter*4+2)
+                                v3 = str(elCounter*4+3)
+                                fs += '<quadrilateral index="'+str(elCounter)\
+                                      +'" v0="'+v0+'" v1="'+v1\
+                                      +'" v2="'+v2+'" v3="'+v3+'"/>'\
+                                      + "\n"
+                                elCounter += 1
+                    fs += '</cells></mesh></dolfin>'
+                else:
+                    # TODO
+                    print("ERROR: Triangles not yet supported for this basis.")
+                    exit()
+            elif(self.nvar == 3):
+                # TODO
+                print("ERROR: Trivariate multipatch not yet supported.")
+                exit()
+            else:
+                # TO NOT DO...
+                print("ERROR: Unsupported parametric dimension: "
+                      +str(self.nvar))
+                exit()
+            f = open(self.MESH_FILE_NAME,'w')
+            f.write(fs)
+            f.close()
+                
+        MPI.barrier(mycomm)
+        mesh = Mesh(self.MESH_FILE_NAME)
+        return mesh
+    
+    def computeNcp(self):
+        ncp = 0
+        for s in self.splines:
+            ncp += s.getNcp()
+        return ncp
+
+    def getNcp(self):
+        return self.ncp
+
+    def getDegree(self):
+        # assumes all splines have same degree
+        return self.splines[0].getDegree()
+
+    def getPatchSideDofs(self,patch,direction,side,nLayers=1):
+        """
+        This is analogous to the ``BSpline`` method ``getSideDofs()``, but
+        it has an extra argument ``patch`` to indicate which patch to obtain
+        DoFs from.  The returned DoFs are in the global numbering.
+        """
+        localSideDofs = self.splines[patch].getSideDofs(direction,side,nLayers)
+        retval = []
+        for dof in localSideDofs:
+            retval += [self.globalDofIndex(dof,patch),]
+        return retval
+    
 class ExplicitBSplineControlMesh(AbstractControlMesh):
 
     """
@@ -561,7 +787,7 @@ class ExplicitBSplineControlMesh(AbstractControlMesh):
         indicates whether or not to use rectangular FEs in the extraction.
         """
         self.scalarSpline = BSpline(degrees,kvecs,useRect)
-        # parametric = physical
+        # parametric == physical
         self.nvar = len(degrees)
         self.nsd = self.nvar + extraDim
 
@@ -588,12 +814,124 @@ class ExplicitBSplineControlMesh(AbstractControlMesh):
                 N = self.scalarSpline.splines[1].getNcp()
                 directionalIndex = dof2ijk(node,M,N)[direction]
 
-            # use Greville abscjklfd for explicit spline
+            # use Greville points for explicit spline
             coord = self.scalarSpline.splines[direction].greville\
                     (directionalIndex)
         else:
             coord = 0.0
         return coord
 
+    def getNsd(self):
+        return self.nsd
+    
+# TODO: think about re-organization, as this is NURBS functionality (but
+# does not rely on igakit)
+class LegacyMultipatchControlMesh(AbstractControlMesh):
+    """
+    A class to generate a multi-patch NURBS from data given in a legacy 
+    ASCII format used by some early prototype IGA codes from the Hughes 
+    group at UT Austin.
+    """
+    
+    def __init__(self,prefix,nPatch,suffix,useRect=USE_RECT_ELEM_DEFAULT):
+        """
+        Loads a collection of ``nPatch`` files with names of the form
+        ``prefix+str(i+1)+suffix``, for ``i in range(0,nPatch)``, where each 
+        file contains data for a NURBS patch, in the ASCII format used by 
+        J. A. Cottrell's preprocessor.  (The ``+1`` in the file name 
+        convention comes from Fortran indexing.)  The optional argument
+        ``useRect`` is a Boolean, indicating whether or not to use
+        rectangular elements.
+
+        The parametric dimension is inferred from the contents of the first 
+        file, and assumed to be the same for all patches.
+        """
+
+        # Accummulate B-splines for each patch's scalar basis here
+        splines = []
+        # Empty control net, to be filled in with pts in homogeneous coords
+        self.bnet = []
+        # sentinel value for parametric and physical dimensions
+        nvar = -1
+        self.nsd = -1
+        for i in range(0,nPatch):
+
+            # Read contents of file
+            fname = prefix + str(i+1) + suffix
+            f = open(fname,'r')
+            fs = f.read()
+            f.close()
+            lines = fs.split('\n')
+
+            # infer parametric dimension from the number of
+            # whitespace-delimited tokens on the second line
+            if(nvar==-1):
+                self.nsd = int(lines[0])
+                nvar = len(lines[1].split())
+
+            # Load general info on $\hat{d}$, spline degrees, number of CPs    
+            degrees = []
+            degStrs = lines[1].split()
+            ncps = []
+            ncpStrs = lines[2].split()
+            for d in range(0,nvar):
+                degrees += [int(degStrs[d]),]
+                ncps += [int(ncpStrs[d]),]
+
+            # Load knot vector for each parametric dimension
+            kvecs = []
+            for d in range(0,nvar):
+                kvecStrs = lines[3+d].split()
+                kvec = []
+                for s in kvecStrs:
+                    kvec += [float(s),]
+                kvecs += [array(kvec),]
+
+            # Use the knot vectors to create a B-spline basis for this patch
+            splines += [BSpline(degrees,kvecs,useRect),]
+
+            # Load control points
+            ncp = 1
+            for d in range(0,nvar):
+                ncp *= ncps[d]
+
+            # Note: this only works for all parametric dimensions because
+            # the ij2dof and ijk2dof functions follow the same convention of
+            # having i as the fastest-varying index, j as the next-fastest,
+            # and k as the outer loop.
+            for pt in range(0,ncp):
+                bnetRow = []
+                coordStrs = lines[3+nvar+pt].split()
+                w = float(coordStrs[self.nsd])
+                # NOTE: bnet should be in homogeneous coordinates
+                for d in range(0,self.nsd):
+                    bnetRow += [float(coordStrs[d])*w,]
+                bnetRow += [w,]
+                # Note: filling of control pts in global, multi-patch bnet is
+                # consistent with the globalDofIndex() method of
+                # MultiBSpline
+                self.bnet += [bnetRow,]
+                
+            # TODO: formats for different parametric dimensions diverge
+            # after this point, and additional data (element types, etc.)
+            # needs to be loaded in an nvar-dependent way.  Ignoring extra
+            # data for now...
+
+        # create the scalar spline instance to be used for all components of
+        # the control mapping.
+        self.scalarSpline = MultiBSpline(splines)
+
+        # Make lookup faster
+        self.bnet = array(self.bnet)
+        
+    # TODO: include some functionality to match up CPs w/in epsilon of
+    # each other and construct an IPER array.  (Cf. TODO in MultiBSpline.)
+    # Should be able to use the SciPy KD tree to do this in a few lines.
+        
+    # Required interface for an AbstractControlMesh:
+    def getHomogeneousCoordinate(self,node,direction):
+        return self.bnet[node,direction]
+    def getScalarSpline(self):
+        return self.scalarSpline
     def getNsd(self):
         return self.nsd
