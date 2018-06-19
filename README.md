@@ -1,6 +1,15 @@
 # tIGAr
 
-A Python library for isogeometric analysis (IGA) using FEniCS.  An article outlining the design of ``tIGAr`` is currently in preparation; please check back soon for details.  
+A Python library for isogeometric analysis (IGA) using FEniCS.  The following article outlining the design of ``tIGAr`` is currently under review:
+```
+@article{Kamensky2018,
+title = {{\sc tIGAr}: Automating isogeometric analysis with {FE}{\sc ni}{CS}},
+journal = "Computer Methods in Applied Mechanics and Engineering",
+author = "D. Kamensky and Y. Bazilevs",
+year = {2018},
+note = {Under review.}
+}
+```
 
 ## Dependencies
 * Any meaningful usage requires [FEniCS](https://fenicsproject.org/) (version 2017.2) and its dependencies.
