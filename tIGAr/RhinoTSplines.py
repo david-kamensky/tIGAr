@@ -136,14 +136,14 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
             nodesAndEvals +=[[nodes[i],evals[i]],]
         return nodesAndEvals
 
-    MESH_FILE_NAME = "mesh.xml"
-            
-    def generateMesh(self):
+    def generateMesh(self,comm=worldcomm):
         # brute force approach: write out an xml file on mpi task zero, then
         # read it back in in parallel
         #
         # TODO: should figure out how to use DOLFIN MeshEditor for this
-        if(mpirank == 0):
+
+        MESH_FILE_NAME = generateMeshXMLFileName(comm)
+        if(MPI.rank(comm) == 0):
             fs = '<?xml version="1.0" encoding="UTF-8"?>' + "\n"
             fs += '<dolfin xmlns:dolfin="http://www.fenics.org/dolfin/">'+"\n"
             if(self.useRect):
@@ -218,14 +218,16 @@ class RhinoTSplineScalarBasis(AbstractScalarBasis):
                           + "\n"
                     elCounter += 2
                 fs += '</cells></mesh></dolfin>'
-            f = open(self.MESH_FILE_NAME,'w')
+            f = open(MESH_FILE_NAME,'w')
             f.write(fs)
             f.close()
 
-        MPI.barrier(mycomm)
-            
-        mesh = Mesh(self.MESH_FILE_NAME)
-
+        MPI.barrier(comm)
+        mesh = Mesh(MESH_FILE_NAME)
+        if(MPI.rank(comm)==0):
+            import os
+            os.system("rm "+MESH_FILE_NAME)
+        
         return mesh
 
     def getNcp(self):

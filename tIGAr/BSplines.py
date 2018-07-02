@@ -442,10 +442,10 @@ class BSpline(AbstractScalarBasis):
                                     dersu[i]*dersv[j]*dersw[k]],]
             return retval
         
-    def generateMesh(self):        
+    def generateMesh(self,comm=worldcomm):
         if(self.nvar == 1):
             spline = self.splines[0]
-            mesh = IntervalMesh(spline.nel,0.0,float(spline.nel))
+            mesh = IntervalMesh(comm,spline.nel,0.0,float(spline.nel))
             x = mesh.coordinates()
             xbar = zeros((len(x),1))
             for i in range(0,len(x)):
@@ -460,7 +460,7 @@ class BSpline(AbstractScalarBasis):
                 cellType = CellType.Type_quadrilateral
             else:
                 cellType = CellType.Type_triangle
-            mesh = UnitSquareMesh.create(uspline.nel,vspline.nel,cellType)
+            mesh = UnitSquareMesh.create(comm,uspline.nel,vspline.nel,cellType)
             #mesh = RectangleMesh(Point(0.0,0.0),\
             #                     Point(uspline.nel,vspline.nel),\
             #                     uspline.nel,vspline.nel)
@@ -483,7 +483,8 @@ class BSpline(AbstractScalarBasis):
                 cellType = CellType.Type_hexahedron
             else:
                 cellType = CellType.Type_tetrahedron
-            mesh = UnitCubeMesh.create(uspline.nel,vspline.nel,wspline.nel,
+            mesh = UnitCubeMesh.create(comm,
+                                       uspline.nel,vspline.nel,wspline.nel,
                                        cellType)
             #mesh = BoxMesh(Point(0.0,0.0,0.0),\
             #               Point(uspline.nel,vspline.nel,wspline.nel),\
@@ -665,10 +666,11 @@ class MultiBSpline(AbstractScalarBasis):
         retval[0] = xi[0] - 2.0*float(patchIndex)
         return retval
 
-    MESH_FILE_NAME = "mesh.xml"
+    def generateMesh(self,comm=worldcomm):
 
-    def generateMesh(self):
-        if(mpirank == 0):
+        MESH_FILE_NAME = generateMeshXMLFileName(comm)
+        
+        if(MPI.rank(comm) == 0):
             fs = '<?xml version="1.0" encoding="UTF-8"?>' + "\n"
             fs += '<dolfin xmlns:dolfin="http://www.fenics.org/dolfin/">'+"\n"
             if(self.nvar == 1):
@@ -680,7 +682,8 @@ class MultiBSpline(AbstractScalarBasis):
                     fs += '<mesh celltype="quadrilateral" dim="2">' + "\n"
 
                     # TODO: Do indexing more intelligently, so that elements
-                    # are connected within each patch.
+                    # are connected within each patch.  (This will improve
+                    # parallel performance.)
                     
                     nverts = 4*self.nel
                     nel = self.nel
@@ -739,12 +742,17 @@ class MultiBSpline(AbstractScalarBasis):
                 print("ERROR: Unsupported parametric dimension: "
                       +str(self.nvar))
                 exit()
-            f = open(self.MESH_FILE_NAME,'w')
+            f = open(MESH_FILE_NAME,'w')
             f.write(fs)
             f.close()
                 
-        MPI.barrier(mycomm)
-        mesh = Mesh(self.MESH_FILE_NAME)
+        MPI.barrier(comm)
+        mesh = Mesh(comm,MESH_FILE_NAME)
+
+        if(MPI.rank(comm)==0):
+            import os
+            os.system("rm "+MESH_FILE_NAME)
+        
         return mesh
     
     def computeNcp(self):
