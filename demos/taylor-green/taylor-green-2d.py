@@ -17,7 +17,6 @@ from numpy import array
 from tIGAr.compatibleSplines import *
 from tIGAr.timeIntegration import *
 import math
-import time
 
 
 ####### Geometry creation #######
