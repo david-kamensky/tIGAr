@@ -730,9 +730,67 @@ class MultiBSpline(AbstractScalarBasis):
                                 elCounter += 1
                     fs += '</cells></mesh></dolfin>'
                 else:
-                    # TODO
-                    print("ERROR: Triangles not yet supported for this basis.")
-                    exit()
+
+                    fs += '<mesh celltype="triangle" dim="2">' + "\n"
+
+                    # TODO: Do indexing more intelligently, so that elements
+                    # are connected within each patch.  (This will improve
+                    # parallel performance.)
+
+                    # TODO: Reduce amount of redundant copy--pasted code
+                    # from quads to tris.
+                    
+                    nverts = 4*self.nel
+                    nel = 2*self.nel # (two triangles per Bezier element)
+                    fs += '<vertices size="'+str(nverts)+'">' + "\n"
+                    vertCounter = 0
+                    x00 = 0.0
+                    for patch in range(0,self.nPatch):
+                        spline = self.splines[patch]
+                        uspline = spline.splines[0]
+                        vspline = spline.splines[1]
+                        for i in range(0,uspline.nel):
+                            for j in range(0,vspline.nel):
+                                x0 = repr(x00+uspline.uniqueKnots[i])
+                                x1 = repr(x00+uspline.uniqueKnots[i+1])
+                                y0 = repr(vspline.uniqueKnots[j])
+                                y1 = repr(vspline.uniqueKnots[j+1])
+                                fs += '<vertex index="'+str(vertCounter)\
+                                      +'" x="'+x0+'" y="'+y0+'"/>' + "\n"
+                                fs += '<vertex index="'+str(vertCounter+1)\
+                                      +'" x="'+x1+'" y="'+y0+'"/>' + "\n"
+                                fs += '<vertex index="'+str(vertCounter+2)\
+                                      +'" x="'+x0+'" y="'+y1+'"/>' + "\n"
+                                fs += '<vertex index="'+str(vertCounter+3)\
+                                      +'" x="'+x1+'" y="'+y1+'"/>' + "\n"
+                                vertCounter += 4
+                        x00 += 2.0
+                    fs += '</vertices>' + "\n"
+                    fs += '<cells size="'+str(nel)+'">' + "\n"
+                    elCounter = 0
+                    for patch in range(0,self.nPatch):
+                        spline = self.splines[patch]
+                        uspline = spline.splines[0]
+                        vspline = spline.splines[1]
+                        for i in range(0,uspline.nel):
+                            for j in range(0,vspline.nel):
+                                bezElCounter = elCounter//2
+                                v0 = str(bezElCounter*4+0)
+                                v1 = str(bezElCounter*4+1)
+                                v2 = str(bezElCounter*4+3)
+                                fs += '<triangle index="'+str(elCounter)\
+                                      +'" v0="'+v0+'" v1="'+v1\
+                                      +'" v2="'+v2+'"/>'\
+                                      + "\n"
+                                v0 = str(bezElCounter*4+0)
+                                v1 = str(bezElCounter*4+3)
+                                v2 = str(bezElCounter*4+2)
+                                fs += '<triangle index="'+str(elCounter+1)\
+                                      +'" v0="'+v0+'" v1="'+v1\
+                                      +'" v2="'+v2+'"/>'\
+                                      + "\n"
+                                elCounter += 2
+                    fs += '</cells></mesh></dolfin>'
             elif(self.nvar == 3):
                 # TODO
                 print("ERROR: Trivariate multipatch not yet supported.")
