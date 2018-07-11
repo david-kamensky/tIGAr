@@ -3,7 +3,8 @@ The ``common`` module
 ---------------------
 contains basic definitions of abstractions for 
 generating extraction data and importing it again for use in analysis.  Upon
-importing it, a number of setup steps are carried out (e.g., initializing MPI).
+importing this module, a number of setup steps are carried out 
+(e.g., initializing MPI).
 """
 
 from dolfin import *
@@ -599,7 +600,9 @@ class ExtractedSpline(object):
         established on the same mesh as an existing spline object for
         facilitating segregated solver schemes.  (Splines common to one
         set of extraction data are always treated as a monolothic mixed
-        function space.)  Everything to do with the spline is integrated 
+        function space.)  This parameter is ignored if ``sourceArg`` is an
+        extraction generator, in which case the generator's mesh is always
+        used.  Everything to do with the spline is integrated 
         using a quadrature rule of degree ``quadDeg``.
         The argument ``doPermutation`` chooses whether or not to apply a
         permutation to the IGA DoF order.  It is ignored if reading
@@ -610,20 +613,22 @@ class ExtractedSpline(object):
         """
 
         if(isinstance(sourceArg,AbstractExtractionGenerator)):
-            self.initFromGenerator(sourceArg,quadDeg,mesh,doPermutation)
+            if(mesh != None and mpirank==0):
+                print("WARNING: Parameter 'mesh' ignored.  Using mesh from "+
+                      "extraction generator instead.")
+            self.initFromGenerator(sourceArg,quadDeg,doPermutation)
         else:
             self.initFromFilesystem(sourceArg,quadDeg,comm,mesh)
             
         self.genericSetup()
             
-
-    def initFromGenerator(self,generator,quadDeg,mesh=None,
+    def initFromGenerator(self,generator,quadDeg,
                           doPermutation=DEFAULT_DO_PERMUTATION):
         """
         Generates instance from an ``AbstractExtractionGenerator``, without
         passing through the filesystem.  This mainly exists to circumvent
         broken parallel HDF5 file output for quads and hexes in 2017.2 
-        (See Issue #1000 for dolfin on Bitbucket.)  
+        (See Issue #1000 for DOLFIN on Bitbucket.)  
         
         NOTE: While seemingly-convenient for small-scale testing/demos, and 
         more robust in the sense that it makes no assumptions about the
@@ -644,10 +649,7 @@ class ExtractedSpline(object):
         self.p = []
         for i in range(0,self.nFields):
             self.p += [generator.getDegree(i)]
-        if(mesh==None):
-            self.mesh = generator.mesh
-        else:
-            self.mesh = mesh
+        self.mesh = generator.mesh
         self.cpFuncs = generator.cpFuncs
         self.VE = generator.VE
         self.VE_control = generator.VE_control
