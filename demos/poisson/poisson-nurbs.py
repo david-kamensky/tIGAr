@@ -48,7 +48,7 @@ ikNURBS.refine(1,newKnots)
 # Output in PetIGA format
 if(mpirank==0):
     PetIGA().write("out.dat",ikNURBS)
-MPI.barrier(mycomm)
+MPI.barrier(worldcomm)
 
 ####### Preprocessing #######
 

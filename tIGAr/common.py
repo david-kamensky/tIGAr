@@ -33,15 +33,11 @@ if(parameters.linear_algebra_backend != 'PETSc'):
     exit()
     
 
-# TODO: rename this (also in submodules/demos) to avoid
-# confusion w/ mpi_comm_self
-mycomm = mpi_comm_world()
-worldcomm = mycomm
-
+worldcomm = mpi_comm_world()
 selfcomm = mpi_comm_self()
 
-mpisize = MPI.size(mycomm)
-mpirank = MPI.rank(mycomm)
+mpisize = MPI.size(worldcomm)
+mpirank = MPI.rank(worldcomm)
 
 from tIGAr.calculusUtils import *
 
@@ -123,7 +119,7 @@ def generateIdentityPermutation(ownRange,comm=worldcomm):
     for i in arange(0,localSize):
         iArray[i] = i+iStart
     retval = PETSc.IS(comm)
-    retval.createGeneral(iArray,comm=self.comm)
+    retval.createGeneral(iArray,comm=comm)
     return retval
 
 class AbstractExtractionGenerator(object):
