@@ -26,15 +26,14 @@ from numpy import arange
 
 import ufl.equation
 
-from dolfin import MPI, mpi_comm_world
+#from dolfin import MPI, mpi_comm_world
 
-if(parameters.linear_algebra_backend != 'PETSc'):
+if(parameters["linear_algebra_backend"] != 'PETSc'):
     print("ERROR: tIGAr requires PETSc.")
     exit()
-    
 
-worldcomm = mpi_comm_world()
-selfcomm = mpi_comm_self()
+worldcomm = MPI.comm_world #mpi_comm_world()
+selfcomm = MPI.comm_self #mpi_comm_self()
 
 mpisize = MPI.size(worldcomm)
 mpirank = MPI.rank(worldcomm)
@@ -83,8 +82,9 @@ FORM_MT = False
 # XML meshes; file name is unique for a given rank on a given communicator.
 def generateMeshXMLFileName(comm):
     import hashlib
+    s = repr(comm)+repr(MPI.rank(comm))
     return "mesh-"\
-        +str(hashlib.md5(repr(comm)+repr(MPI.rank(comm)))\
+        +str(hashlib.md5(s.encode("utf-8"))\
              .hexdigest())+".xml"
     
 # helper function to do MatMultTranspose() without all the setup steps for the
@@ -337,7 +337,7 @@ class AbstractExtractionGenerator(object):
                                       self.mesh.ufl_cell(),\
                                       self.getDegree(i)),]
 
-            self.VE = MixedElement(VE_components)
+            self.VE = MixedElement(tuple(VE_components))
         else:
             self.VE = FiniteElement(self.extractionElement(),\
                                     self.mesh.ufl_cell(),\
@@ -497,84 +497,84 @@ class AbstractExtractionGenerator(object):
             f.close()
         MPI.barrier(self.comm)
 
-class SplineDisplacementExpression(Expression):
-
-    """
-    An expression that can be used to evaluate ``F`` plus an optional 
-    displacement at arbitrary points.  To be usable, it must have the 
-    following attributes assigned: 
-
-    (1) ``self.spline``: an instance of ``ExtractedSpline`` to which the 
-    displacement applies. 
-
-    (2) ``self.functionList:`` a list of scalar functions in the 
-    function space for ``spline``'s control mesh, which act as components of 
-    the displacement. If ``functionList`` contains too few entries (including 
-    zero entries), the missing entries are assumed to be zero.
-    """
-    
-    # needs attributes:
-    # - spline (ExtractedSpline)
-    # - functionList (list of SCALAR Functions)
-    
-    def eval_cell(self,values,x,c):
-        phi = []
-        out = array([0.0,])
-        for i in range(0,self.spline.nsd):
-            self.spline.cpFuncs[i].set_allow_extrapolation(True)
-            #phi += [self.cpFuncs[i](Point(x)),]
-            self.spline.cpFuncs[i].eval_cell(out,x,c)
-            phi += [out[0],]
-        self.spline.cpFuncs[self.spline.nsd].set_allow_extrapolation(True)
-        for i in range(0,self.spline.nsd):
-            if(i<len(self.functionList)):
-                self.functionList[i].set_allow_extrapolation(True)
-                self.functionList[i].eval_cell(out,x,c)
-                phi[i] += out[0]
-        #w = self.cpFuncs[self.nsd](Point(x))
-        self.spline.cpFuncs[self.spline.nsd].eval_cell(out,x,c)
-        w = out[0]
-        for i in range(0,self.spline.nsd):
-            phi[i] = phi[i]/w
-        xx = []
-        for i in range(0,self.spline.nsd):
-            if(i<len(x)):
-                xx += [x[i],]
-            else:
-                xx += [0,]
-        for i in range(0,self.spline.nsd):
-            values[i] = phi[i] - xx[i]
-            
-    #def value_shape(self):
-    #    return (self.spline.nsd,)
+#class SplineDisplacementExpression(Expression):
+#
+#    """
+#    An expression that can be used to evaluate ``F`` plus an optional 
+#    displacement at arbitrary points.  To be usable, it must have the 
+#    following attributes assigned: 
+#
+#    (1) ``self.spline``: an instance of ``ExtractedSpline`` to which the 
+#    displacement applies. 
+#
+#    (2) ``self.functionList:`` a list of scalar functions in the 
+#    function space for ``spline``'s control mesh, which act as components of 
+#    the displacement. If ``functionList`` contains too few entries (including 
+#    zero entries), the missing entries are assumed to be zero.
+#    """
+#    
+#    # needs attributes:
+#    # - spline (ExtractedSpline)
+#    # - functionList (list of SCALAR Functions)
+#    
+#    def eval_cell(self,values,x,c):
+#        phi = []
+#        out = array([0.0,])
+#        for i in range(0,self.spline.nsd):
+#            self.spline.cpFuncs[i].set_allow_extrapolation(True)
+#            #phi += [self.cpFuncs[i](Point(x)),]
+#            self.spline.cpFuncs[i].eval_cell(out,x,c)
+#            phi += [out[0],]
+#        self.spline.cpFuncs[self.spline.nsd].set_allow_extrapolation(True)
+#        for i in range(0,self.spline.nsd):
+#            if(i<len(self.functionList)):
+#                self.functionList[i].set_allow_extrapolation(True)
+#                self.functionList[i].eval_cell(out,x,c)
+#                phi[i] += out[0]
+#        #w = self.cpFuncs[self.nsd](Point(x))
+#        self.spline.cpFuncs[self.spline.nsd].eval_cell(out,x,c)
+#        w = out[0]
+#        for i in range(0,self.spline.nsd):
+#            phi[i] = phi[i]/w
+#        xx = []
+#        for i in range(0,self.spline.nsd):
+#            if(i<len(x)):
+#                xx += [x[i],]
+#            else:
+#                xx += [0,]
+#        for i in range(0,self.spline.nsd):
+#            values[i] = phi[i] - xx[i]
+#            
+#    #def value_shape(self):
+#    #    return (self.spline.nsd,)
     
 
 # compose with deformation
-class tIGArExpression(Expression):
-
-    """
-    A subclass of ``Expression`` which composes its attribute ``self.expr``
-    (also an ``Expression``) with the deformation ``F`` given by its attribute 
-    ``self.cpFuncs``, which is a list of ``Function`` objects, specifying the 
-    components of ``F``.
-    """
-
-    # using eval_cell allows us to avoid having to search for which cell
-    # x is in; also x need not be in a unique cell, which is nice for
-    # splines that do not have a single coordinate chart
-    def eval_cell(self,values,x,c):
-        phi = []
-        out = array([0.0,])
-        for i in range(0,self.nsd):
-            self.cpFuncs[i].set_allow_extrapolation(True)
-            self.cpFuncs[i].eval_cell(out,x,c)
-            phi += [out[0],]
-        self.cpFuncs[self.nsd].set_allow_extrapolation(True)
-        self.cpFuncs[self.nsd].eval_cell(out,x,c)
-        w = out[0]
-        for i in range(0,self.nsd):
-            phi[i] = phi[i]/w
-        self.expr.eval(values,array(phi))
+#class tIGArExpression(Expression):
+#
+#    """
+#    A subclass of ``Expression`` which composes its attribute ``self.expr``
+#    (also an ``Expression``) with the deformation ``F`` given by its attribute 
+#    ``self.cpFuncs``, which is a list of ``Function`` objects, specifying the 
+#    components of ``F``.
+#    """
+#
+#    # using eval_cell allows us to avoid having to search for which cell
+#    # x is in; also x need not be in a unique cell, which is nice for
+#    # splines that do not have a single coordinate chart
+#    def eval_cell(self,values,x,c):
+#        phi = []
+#        out = array([0.0,])
+#        for i in range(0,self.nsd):
+#            self.cpFuncs[i].set_allow_extrapolation(True)
+#            self.cpFuncs[i].eval_cell(out,x,c)
+#            phi += [out[0],]
+#        self.cpFuncs[self.nsd].set_allow_extrapolation(True)
+#        self.cpFuncs[self.nsd].eval_cell(out,x,c)
+#        w = out[0]
+#        for i in range(0,self.nsd):
+#            phi[i] = phi[i]/w
+#        self.expr.eval(values,array(phi))
 
 # could represent any sort of spline that is extractable
 class ExtractedSpline(object):
@@ -727,7 +727,7 @@ class ExtractedSpline(object):
                 VE_components \
                     += [FiniteElement(self.elementType,self.mesh.ufl_cell(),\
                                       self.p[i]),]
-            self.VE = MixedElement(VE_components)
+            self.VE = MixedElement(tuple(VE_components))
         else:
             self.VE = FiniteElement(self.elementType,self.mesh.ufl_cell(),\
                                     self.p[0])
@@ -814,8 +814,10 @@ class ExtractedSpline(object):
         
         # for marking subdomains
         #self.boundaryMarkers = FacetFunctionSizet(self.mesh,0)
+        #self.boundaryMarkers \
+        #    = MeshFunctionSizet(self.mesh,self.mesh.topology().dim()-1,0)
         self.boundaryMarkers \
-            = MeshFunctionSizet(self.mesh,self.mesh.topology().dim()-1,0)
+            = MeshFunction("size_t",self.mesh,self.mesh.topology().dim()-1,0)
         
         # caching transposes of extraction matrices
         if(FORM_MT):
@@ -876,28 +878,28 @@ class ExtractedSpline(object):
         self.V_displacement = FunctionSpace(self.mesh,self.VE_displacement)
         self.V_linear = FunctionSpace(self.mesh,self.VE_linear)
         
-    def interpolateAsDisplacement(self,functionList=[]):
-
-        """
-        Given a list of scalar functions, get a displacement field from 
-        mesh coordinates to control + functions in physical space, 
-        interpolated on linear elements for plotting without discontinuities 
-        on cut-up meshes. Default argument of ``functionList=[]`` 
-        just interpolates the control functions.  If there are fewer elements
-        in ``functionList`` than there are control functions, then the missing
-        functions are assumed to be zero.
-
-        NOTE: Currently only works with extraction to simplicial elements.
-        """
-        
-        #expr = SplineDisplacementExpression(degree=self.quadDeg)
-        expr = SplineDisplacementExpression\
-               (element=self.VE_displacement)
-        expr.spline = self
-        expr.functionList = functionList
-        disp = Function(self.V_displacement)
-        disp.interpolate(expr)
-        return disp
+    #def interpolateAsDisplacement(self,functionList=[]):
+    #
+    #    """
+    #    Given a list of scalar functions, get a displacement field from 
+    #    mesh coordinates to control + functions in physical space, 
+    #    interpolated on linear elements for plotting without discontinuities 
+    #    on cut-up meshes. Default argument of ``functionList=[]`` 
+    #    just interpolates the control functions.  If there are fewer elements
+    #    in ``functionList`` than there are control functions, then the missing
+    #    functions are assumed to be zero.
+    #
+    #    NOTE: Currently only works with extraction to simplicial elements.
+    #    """
+    #    
+    #    #expr = SplineDisplacementExpression(degree=self.quadDeg)
+    #    expr = SplineDisplacementExpression\
+    #           (element=self.VE_displacement)
+    #    expr.spline = self
+    #    expr.functionList = functionList
+    #    disp = Function(self.V_displacement)
+    #    disp.interpolate(expr)
+    #    return disp
         
     # Cartesian differential operators in deformed configuration
     # N.b. that, when applied to tensor-valued f, f is considered to be
@@ -976,21 +978,21 @@ class ExtractedSpline(object):
             ff = f
         return curvilinearDiv(ff)
     
-    def spatialExpression(self,expr):
-        """
-        Converts string ``expr`` into an ``Expression``, 
-        treating the coordinates ``'x[i]'`` in ``expr`` as 
-        spatial coordinates.  
-        (Using the standard ``Expression`` constructor, these would be treated 
-        as parametric coordinates.)
-
-        NOTE: Only works when extracting to simplicial elements.
-        """
-        retval = tIGArExpression(degree=self.quadDeg)
-        retval.expr = Expression(expr,degree=self.quadDeg)
-        retval.nsd = self.nsd
-        retval.cpFuncs = self.cpFuncs
-        return retval
+    #def spatialExpression(self,expr):
+    #    """
+    #    Converts string ``expr`` into an ``Expression``, 
+    #    treating the coordinates ``'x[i]'`` in ``expr`` as 
+    #    spatial coordinates.  
+    #    (Using the standard ``Expression`` constructor, these would be treated 
+    #    as parametric coordinates.)
+    #
+    #    NOTE: Only works when extracting to simplicial elements.
+    #    """
+    #    retval = tIGArExpression(degree=self.quadDeg)
+    #    retval.expr = Expression(expr,degree=self.quadDeg)
+    #    retval.nsd = self.nsd
+    #    retval.cpFuncs = self.cpFuncs
+    #    return retval
 
     def parametricExpression(self,expr):
         """

@@ -89,12 +89,12 @@ if(mpirank==0):
 QUAD_DEG = 4
 
 # Create the extracted spline directly from the generator.
-# As of version 2017.2, this is required for using quad/hex elements in
+# As of version 2018.1, this is required for using quad/hex elements in
 # parallel.
 spline = ExtractedSpline(splineGenerator,QUAD_DEG)
 
 # Alternative: Can read the extracted spline back in from the filesystem.
-# For quad/hex elements, in version 2017.2, this only works in serial.
+# For quad/hex elements, in version 2018.1, this only works in serial.
 
 #spline = ExtractedSpline(DIR,QUAD_DEG)
 

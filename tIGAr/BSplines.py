@@ -33,64 +33,111 @@ def uniformKnots(p,start,end,N,periodic=False):
 # reliably catch repeated knots
 KNOT_NEAR_EPS = 10.0*DOLFIN_EPS
 
+
 # cProfile identified basis function evaluation as a bottleneck in the
 # preprocessing, so i've moved it into an inline C++ routine, using
 # dolfin's extension module compilation
 basisFuncsCXXString = """
+#include <dolfin/common/Array.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+namespace py = pybind11;
+
 namespace dolfin {
 
 int flatIndex(int i, int j, int N){
   return i*N + j;
 }
 
-void basisFuncsInner(const Array<double> &ghostKnots,
+//void basisFuncsInner(const Array<double> &ghostKnots,
+//                     int nGhost,
+//                     double u,
+//                     int pl,
+//                     int i,
+//                     const Array<double> &ndu,
+//                     const Array<double> &left,
+//                     const Array<double> &right,
+//                     const Array<double> &ders){
+
+typedef py::array_t<double, py::array::c_style | py::array::forcecast> 
+    npArray;
+
+void basisFuncsInner(npArray ghostKnots,
                      int nGhost,
                      double u,
                      int pl,
                      int i,
-                     const Array<double> &ndu,
-                     const Array<double> &left,
-                     const Array<double> &right,
-                     const Array<double> &ders){
+                     npArray ndu,
+                     npArray left,
+                     npArray right,
+                     npArray ders){
 
     // Technically results in un-defined behavior:
-    Array<double> *ghostKnotsp = const_cast<Array<double>*>(&ghostKnots);
-    Array<double> *ndup = const_cast<Array<double>*>(&ndu);
-    Array<double> *leftp = const_cast<Array<double>*>(&left);
-    Array<double> *rightp = const_cast<Array<double>*>(&right);
-    Array<double> *dersp = const_cast<Array<double>*>(&ders);
+    //Array<double> *ghostKnotsp = const_cast<Array<double>*>(&ghostKnots);
+    //Array<double> *ndup = const_cast<Array<double>*>(&ndu);
+    //Array<double> *leftp = const_cast<Array<double>*>(&left);
+    //Array<double> *rightp = const_cast<Array<double>*>(&right);
+    //Array<double> *dersp = const_cast<Array<double>*>(&ders);
+
+    auto ghostKnotsb = ghostKnots.request();
+    auto ndub = ndu.request();
+    auto leftb = left.request();
+    auto rightb = right.request();
+    auto dersb = ders.request();
+
+    double *ghostKnotsp = (double *)ghostKnotsb.ptr;
+    double *ndup = (double *)ndub.ptr;
+    double *leftp = (double *)leftb.ptr;
+    double *rightp = (double *)rightb.ptr;
+    double *dersp = (double *)dersb.ptr;
 
     int N = pl+1;
-    (*ndup)[flatIndex(0,0,N)] = 1.0;
+    ndup[flatIndex(0,0,N)] = 1.0;
     for(int j=1; j<pl+1; j++){
-        (*leftp)[j] = u - (*ghostKnotsp)[i-j+nGhost];
-        (*rightp)[j] = (*ghostKnotsp)[i+j-1+nGhost]-u;
+        leftp[j] = u - ghostKnotsp[i-j+nGhost];
+        rightp[j] = ghostKnotsp[i+j-1+nGhost]-u;
         double saved = 0.0;
         for(int r=0; r<j; r++){
-            (*ndup)[flatIndex(j,r,N)] = (*rightp)[r+1] + (*leftp)[j-r];
-            double temp = (*ndup)[flatIndex(r,j-1,N)]
-                          /(*ndup)[flatIndex(j,r,N)];
-            (*ndup)[flatIndex(r,j,N)] = saved + (*rightp)[r+1]*temp;
-            saved = (*leftp)[j-r]*temp;
+            ndup[flatIndex(j,r,N)] = rightp[r+1] + leftp[j-r];
+            double temp = ndup[flatIndex(r,j-1,N)]
+                          /ndup[flatIndex(j,r,N)];
+            ndup[flatIndex(r,j,N)] = saved + rightp[r+1]*temp;
+            saved = leftp[j-r]*temp;
         } // r
-        (*ndup)[flatIndex(j,j,N)] = saved;
+        ndup[flatIndex(j,j,N)] = saved;
     } // j
     for(int j=0; j<pl+1; j++){
-        (*dersp)[j] = (*ndup)[flatIndex(j,pl,N)];
+        dersp[j] = ndup[flatIndex(j,pl,N)];
     } // j
+}
+
+PYBIND11_MODULE(SIGNATURE, m)
+{
+    m.def("basisFuncsInner",&basisFuncsInner,"");
 }
 }
 """
 
-basisFuncsCXXModule = compile_extension_module(basisFuncsCXXString,
-                                               cppargs='-g -O2')
+#basisFuncsCXXModule = compile_extension_module(basisFuncsCXXString,
+#                                               cppargs='-g -O2')
+basisFuncsCXXModule = compile_cpp_code(basisFuncsCXXString)
 
+    
 # function to eval B-spline basis functions (for internal use)
 def basisFuncsInner(ghostKnots,nGhost,u,pl,i,ndu,left,right,ders):
     
+    # TODO: Fix C++ module for 2018.1, and restore this (or equivalent)
+    # call to a compiled routine.
+    #
+    #basisFuncsCXXModule.basisFuncsInner(ghostKnots,nGhost,u,pl,i,
+    #                                    ndu.flatten(),
+    #                                    left,right,ders)
     basisFuncsCXXModule.basisFuncsInner(ghostKnots,nGhost,u,pl,i,
                                         ndu.flatten(),
                                         left,right,ders)
+    
+    # Backup Python implementation:
+    #
     #ndu[0,0] = 1.0
     #for j in range(1,pl+1):
     #    left[j] = u - ghostKnots[i-j+nGhost]
@@ -457,9 +504,9 @@ class BSpline(AbstractScalarBasis):
             uspline = self.splines[0]
             vspline = self.splines[1]
             if(self.useRect):
-                cellType = CellType.Type_quadrilateral
+                cellType = CellType.Type.quadrilateral
             else:
-                cellType = CellType.Type_triangle
+                cellType = CellType.Type.triangle
             mesh = UnitSquareMesh.create(comm,uspline.nel,vspline.nel,cellType)
             #mesh = RectangleMesh(Point(0.0,0.0),\
             #                     Point(uspline.nel,vspline.nel),\
@@ -480,9 +527,9 @@ class BSpline(AbstractScalarBasis):
             vspline = self.splines[1]
             wspline = self.splines[2]
             if(self.useRect):
-                cellType = CellType.Type_hexahedron
+                cellType = CellType.Type.hexahedron
             else:
-                cellType = CellType.Type_tetrahedron
+                cellType = CellType.Type.tetrahedron
             mesh = UnitCubeMesh.create(comm,
                                        uspline.nel,vspline.nel,wspline.nel,
                                        cellType)

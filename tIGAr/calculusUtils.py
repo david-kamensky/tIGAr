@@ -12,6 +12,8 @@ module can also be used in non-tIGAr FEniCS applications.
 # optimized for generality/readability rather than speed of execution.
 
 from dolfin import *
+from ufl import indices, rank
+from ufl.classes import PermutationSymbol
 
 def getMetric(F):
     """
