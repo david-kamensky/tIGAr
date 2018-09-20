@@ -12,7 +12,7 @@ setup(
     version='2018.1',
     packages=['tIGAr'],
     url='https://github.com/david-kamensky/tIGAr',
-    license='GNU GPLv3',
+    license='GNU LGPLv3',
     author='D. Kamensky',
     author_email='',
     description="Isogeometric analysis with FEniCS",
