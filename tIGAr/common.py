@@ -53,7 +53,12 @@ else:
     
 # basis function evaluations less than this will be considered outside the
 # function's support
-DEFAULT_BASIS_FUNC_IGNORE_EPS = 1e-9
+DEFAULT_BASIS_FUNC_IGNORE_EPS = 1e-15
+
+# This was too small for optimal convergence rates in high-order biharmonic
+# discretizations with highly-refined meshes:
+#DEFAULT_BASIS_FUNC_IGNORE_EPS = 1e-9
+
 
 # file naming conventions
 EXTRACTION_DATA_FILE = "extraction-data.h5"
