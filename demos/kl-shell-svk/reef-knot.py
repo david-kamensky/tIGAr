@@ -166,11 +166,20 @@ def assembleContact(dispFunc):
     # Establish tensors to accumulate contact contributions.
     F = assemble(inner(Constant(d*(0.0,)),TestFunction(spline.V))*dx,
                  finalize_tensor=False)
+    Fv = as_backend_type(F).vec()
     KPETSc = PETSc.Mat()
     KPETSc.createAIJ([[d*nNodes,None],[None,d*nNodes]])
     KPETSc.setPreallocationNNZ([PREALLOC,PREALLOC])
     KPETSc.setUp()
     K = PETScMatrix(KPETSc)
+    Km = as_backend_type(K).mat()
+
+    # Ideally, we would first examine the set of pairs
+    # returned by the cKDTree query, then allocate based
+    # on that, rather than the present approach of
+    # preallocating a large number of nonzeros and hoping
+    # for the best.  
+    Km.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR,False)
 
     # Obtain displacement in homogeneous representation.
     dispFlat = dispFunc.vector().get_local()
@@ -218,14 +227,18 @@ def assembleContact(dispFunc):
             C = quadWeights[node1]*quadWeights[node2]
             f12 = C*phiPrime(r12)*r12hat
 
+            # Nodal FE spline (not quadrature) weights:
+            w1 = spline.cpFuncs[d].vector().get_local()[node1]
+            w2 = spline.cpFuncs[d].vector().get_local()[node2]
+
             # Add equal-and-opposite forces to the RHS vector.
             for direction in range(0,d):
                 dof1 = nodeToDof(node1,direction)
                 dof2 = nodeToDof(node2,direction)
-                as_backend_type(F)\
-                    .vec().setValue(dof1,-f12[direction],addv=ADD_MODE)
-                as_backend_type(F)\
-                    .vec().setValue(dof2,f12[direction],addv=ADD_MODE)
+                Fv.setValue(dof1,-f12[direction]/w1,addv=ADD_MODE)
+                Fv.setValue(dof2,f12[direction]/w2,addv=ADD_MODE)
+                # (Weights are involved here because the FE test function
+                # that goes to 1 at a node is in homogeneous representation.)
 
             # Tangent computation: see (25)--(26) from original reference.  
             k12_tensor = C*(phiDoublePrime(r12)*r_otimes_r \
@@ -239,24 +252,19 @@ def assembleContact(dispFunc):
                     n2dof1 = nodeToDof(node2,d1)
                     n2dof2 = nodeToDof(node2,d2)
                     k12 = k12_tensor[d1,d2]
-                    Km = as_backend_type(K).mat()
-                    # Ideally, we would first examine the set of pairs
-                    # returned by the cKDTree query, then allocate based
-                    # on that, rather than the present approach of
-                    # preallocating a large number of nonzeros and hoping
-                    # for the best.  
-                    Km.setOption(PETSc.Mat.Option.NEW_NONZERO_ALLOCATION_ERR,
-                                 False)
+            
                     # 11 contribution:
-                    Km.setValue(n1dof1,n1dof2,k12,addv=ADD_MODE)
+                    Km.setValue(n1dof1,n1dof2,k12/(w1*w1),addv=ADD_MODE)
                     # 22 contribution:
-                    Km.setValue(n2dof1,n2dof2,k12,addv=ADD_MODE)
+                    Km.setValue(n2dof1,n2dof2,k12/(w2*w2),addv=ADD_MODE)
                     # Off-diagonal contributions:
-                    Km.setValue(n1dof1,n2dof2,-k12,addv=ADD_MODE)
-                    Km.setValue(n2dof1,n1dof2,-k12,addv=ADD_MODE)
-
-    as_backend_type(F).vec().assemble()
-    as_backend_type(K).mat().assemble()
+                    Km.setValue(n1dof1,n2dof2,-k12/(w1*w2),addv=ADD_MODE)
+                    Km.setValue(n2dof1,n1dof2,-k12/(w1*w2),addv=ADD_MODE)
+                    # (Weights are involved here because FE test and trial
+                    # space basis functions that go to 1 at nodes are in
+                    # homogeneous representation.)
+    Fv.assemble()
+    Km.assemble()
 
     return K,F
 
