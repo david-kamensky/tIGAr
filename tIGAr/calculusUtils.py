@@ -291,7 +291,7 @@ def cartesianCurl(f,F):
 def cartesianPushforwardN(u,F):
     """
     The curl-conserving pushforward of ``u`` by mapping ``F`` (as might be
-    used for a Nedelec elemeng, hence "N").  This is only valid for 3D vector
+    used for a Nedelec element, hence "N").  This is only valid for 3D vector
     fields on 3D domains.  
     """
     DF = grad(F)
@@ -304,10 +304,18 @@ def cartesianPushforwardN(u,F):
 def cartesianPushforwardRT(v,F):
     """
     The div-conserving pushforward of ``v`` by mapping ``F`` (as might be
-    used for a Raviart--Thomas elemeng, hence "RT").
+    used for a Raviart--Thomas element, hence "RT").
     """
     DF = grad(F)
     #return DF*v/det(DF)
+    
+    # Note: the metric is used for the Jacobian here to make sure this
+    # formula remains well-defined on manifolds of nonzero co-dimension.
+    # In that case det(DF) results in an error.
+    
+    # TODO: Include a switch somewhere to use the simpler formlua in the
+    # co-dimension zero case, to avoid the unnecessary extra operations.
+
     g = getMetric(F)
     return DF*v/sqrt(det(g))
     
@@ -425,7 +433,9 @@ def getQuadRule(n):
              Constant(0.34785484513745385736)]
         return (xi,w)
     
-    #TODO add more quadrature rules
+    # TODO: add more quadrature rules (or, try to find a function in scipy or
+    # another common library, to generate arbitrary Gaussian quadrature
+    # rules on-demand).
     
     print("ERROR: invalid number of quadrature points requested.")
     exit()
