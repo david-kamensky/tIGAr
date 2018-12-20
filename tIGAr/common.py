@@ -32,8 +32,8 @@ if(parameters["linear_algebra_backend"] != 'PETSc'):
     print("ERROR: tIGAr requires PETSc.")
     exit()
 
-worldcomm = MPI.comm_world #mpi_comm_world()
-selfcomm = MPI.comm_self #mpi_comm_self()
+worldcomm = MPI.comm_world
+selfcomm = MPI.comm_self
 
 mpisize = MPI.size(worldcomm)
 mpirank = MPI.rank(worldcomm)
@@ -378,7 +378,6 @@ class AbstractExtractionGenerator(object):
 
             self.cpFuncs[i].vector().set_local((self.M_control*MTC).get_local())
             as_backend_type(self.cpFuncs[i].vector()).vec().ghostUpdate()
-
         
         # may need to be permuted
         self.zeroDofs = [] #self.generateZeroDofs()
@@ -1263,7 +1262,7 @@ class ExtractedSpline(object):
 
     
     # project something onto the solution space; ignore bcs by default
-    def project(self,toProject,applyBCs=False,rationalize=True):
+    def project(self,toProject,applyBCs=False,rationalize=True,lumpMass=False):
         """
         L2 projection of some UFL object ``toProject`` onto the 
         ``ExtractedSpline`` object's solution space.  Can optionally apply
@@ -1272,18 +1271,36 @@ class ExtractedSpline(object):
         parameter ``rationalize`` is a Boolean specifying whether or not
         to divide through by the weight function (thus returning a UFL
         ``Division`` object, rather than a ``Function``).  Rationalization
-        is done by default.
+        is done by default.  The parameter ``lumpMass`` is a Boolean 
+        indicating whether or not to use mass lumping, which is ``False`` by
+        default.  (Lumping may be useful for preventing oscillations when
+        projecting discontinuous initial/boundary conditions.)
         """
         u = TrialFunction(self.V)
         v = TestFunction(self.V)
         u = self.rationalize(u)
         v = self.rationalize(v)
-        #res = inner(u-toProject,v)*self.dx
-        lhsForm = inner(u,v)*self.dx
         rhsForm = inner(toProject,v)*self.dx
         retval = Function(self.V)
-        #self.solveLinearVariationalProblem(res,retval,applyBCs)
-        self.solveLinearVariationalProblem(lhsForm==rhsForm,retval,applyBCs)
+        if(not lumpMass):
+            lhsForm = inner(u,v)*self.dx
+            self.solveLinearVariationalProblem(lhsForm==rhsForm,
+                                               retval,applyBCs)
+        else:
+            if(self.nFields==1):
+                oneConstant = Constant(1.0)
+            else:
+                oneConstant = Constant(self.nFields*(1.0,))
+            lhsForm = inner(oneConstant,v)*self.dx
+            lhsVecFE = assemble(lhsForm)
+            lhsVec = self.extractVector(lhsVecFE,applyBCs=False)
+            rhsVecFE = assemble(rhsForm)
+            rhsVec = self.extractVector(rhsVecFE,applyBCs=applyBCs)
+            igaDoFs = self.extractVector(Function(self.V).vector())
+            as_backend_type(igaDoFs).vec()\
+                .pointwiseDivide(as_backend_type(rhsVec).vec(),
+                                 as_backend_type(lhsVec).vec())
+            retval.vector()[:] = self.M*igaDoFs
         if(rationalize):
             retval = self.rationalize(retval)
         return retval
