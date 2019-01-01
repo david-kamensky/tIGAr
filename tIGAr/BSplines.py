@@ -369,15 +369,22 @@ class BSpline(AbstractScalarBasis):
     Class implementing the ``AbstractScalarBasis`` interface, to represent
     a uni-, bi-, or tri-variate B-spline.
     """
-    
-    def __init__(self,degrees,kvecs,useRect=USE_RECT_ELEM_DEFAULT):
+
+    def __init__(self,degrees,kvecs,useRect=USE_RECT_ELEM_DEFAULT,
+                 overRefine=0):
         """
         Create a ``BSpline`` with degrees in each direction given by the
         sequence ``degrees``, knot vectors given by the list of 
         sequences ``kvecs``, and an optional Boolean parameter 
         ``useRect``, indicating
         whether or not rectangular elements should be used in the 
-        extracted representation.
+        extracted representation.  The optional parameter ``overRefine``
+        indicates how many levels of refinement to apply beyond what is
+        needed to represent the spline functions; choosing a value greater
+        than the default of zero may be useful for 
+        integrating functions with fine-scale features.
+        
+        NOTE: Over-refinement is only supported with simplicial elements.
         """
         self.nvar = len(degrees)
         if(self.nvar > 3 or self.nvar < 1):
@@ -387,11 +394,9 @@ class BSpline(AbstractScalarBasis):
         for i in range(0,self.nvar):
             self.splines += [BSpline1(degrees[i],kvecs[i]),]
         self.useRect = useRect
-
+        self.overRefine = overRefine
         self.ncp = self.computeNcp()
-
         self.nel = self.computeNel()
-        
 
     def normalizeKnotVectors(self):
         """
@@ -499,7 +504,7 @@ class BSpline(AbstractScalarBasis):
                 knotIndex = int(round(x[i,0]))
                 xbar[i,0] = spline.uniqueKnots[knotIndex]
             mesh.coordinates()[:] = xbar
-            return mesh
+            #return mesh
         elif(self.nvar == 2):
             uspline = self.splines[0]
             vspline = self.splines[1]
@@ -521,7 +526,7 @@ class BSpline(AbstractScalarBasis):
                 xbar[i,0] = uspline.uniqueKnots[uknotIndex]
                 xbar[i,1] = vspline.uniqueKnots[vknotIndex]
             mesh.coordinates()[:] = xbar
-            return mesh
+            #return mesh
         else:
             uspline = self.splines[0]
             vspline = self.splines[1]
@@ -549,7 +554,11 @@ class BSpline(AbstractScalarBasis):
                 xbar[i,1] = vspline.uniqueKnots[vknotIndex]
                 xbar[i,2] = wspline.uniqueKnots[wknotIndex]
             mesh.coordinates()[:] = xbar
-            return mesh
+
+        # Apply any over-refinement specified:
+        for i in range(0,self.overRefine):
+            mesh = refine(mesh)
+        return mesh
         
     def computeNcp(self):
         prod = 1
@@ -892,14 +901,15 @@ class ExplicitBSplineControlMesh(AbstractControlMesh):
     domains.
     """
     
-    def __init__(self,degrees,kvecs,extraDim=0,useRect=USE_RECT_ELEM_DEFAULT):
+    def __init__(self,degrees,kvecs,extraDim=0,useRect=USE_RECT_ELEM_DEFAULT,
+                 overRefine=0):
         """
         Create an ``ExplicitBSplineControlMesh`` with degrees in each direction
         given by the sequence ``degrees`` and knot vectors given by the list
         of sequences ``kvecs``.  The optional Boolean parameter ``useRect``
         indicates whether or not to use rectangular FEs in the extraction.
         """
-        self.scalarSpline = BSpline(degrees,kvecs,useRect)
+        self.scalarSpline = BSpline(degrees,kvecs,useRect,overRefine)
         # parametric == physical
         self.nvar = len(degrees)
         self.nsd = self.nvar + extraDim
