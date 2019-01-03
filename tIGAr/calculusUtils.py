@@ -12,7 +12,7 @@ module can also be used in non-tIGAr FEniCS applications.
 # optimized for generality/readability rather than speed of execution.
 
 from dolfin import *
-from ufl import indices, rank
+from ufl import indices, rank, shape
 from ufl.classes import PermutationSymbol
 
 def getMetric(F):
@@ -73,7 +73,7 @@ def surfaceJacobian(g,N):
     Returns the surface element associated with the metric ``g``, for a surface
     oriented in the direction given by unit vector ``N``.
 
-    Note:  In version 2017.2, nontrivial boundary integrals produce 
+    Note:  In version 2018.1, nontrivial boundary integrals produce 
     incorrect results with quad/hex elements.  Use of this in boundary 
     integrals is only robust with simplices.  
     """
@@ -277,13 +277,29 @@ def cartesianDiv(f,F):
 
 def cartesianCurl(f,F):
     """
-    The curl operator corresponding to ``cartesianGrad(f,F)``.  Only valid
-    for ``f`` of rank 1, with dimension 3.
+    The curl operator corresponding to ``cartesianGrad(f,F)``.  For ``f`` of 
+    rank 1, it returns a vector in 3D or a scalar in 2D.  For ``f`` scalar
+    in 2D, it returns a vector.
     """
-    eps = PermutationSymbol(3)
+    n = rank(f)
     gradf = cartesianGrad(f,F)
-    (i,j,k) = indices(3)
-    return as_tensor(eps[i,j,k]*gradf[k,j],(i,))
+    if(n==1):
+        m = shape(f)[0]
+        eps = PermutationSymbol(m)
+        if(m == 3):
+            (i,j,k) = indices(3)
+            return as_tensor(eps[i,j,k]*gradf[k,j],(i,))
+        elif(m == 2):
+            (j,k) = indices(2)
+            return eps[j,k]*gradf[k,j]
+        else:
+            print("ERROR: Unsupported dimension of argument to curl.")
+            exit()
+    elif(n==0):
+        return as_vector((-gradf[1],gradf[0]))
+    else:
+        print("ERROR: Unsupported rank of argument to curl.")
+        exit()
 
 # pushforwards for compatible spaces; output is in cartesian coordinates for
 # physical space
