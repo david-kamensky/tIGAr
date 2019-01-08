@@ -501,6 +501,86 @@ class AbstractExtractionGenerator(object):
             f.close()
         MPI.barrier(self.comm)
 
+class ExtractedNonlinearProblem(NonlinearProblem):
+    """
+    Class encapsulating a nonlinear problem posed on an extracted spline, to
+    allow existing nonlinear solvers (e.g., PETSc SNES) to be used.
+
+    NOTE: Obtaining the initial guess for the IGA DoFs from the given 
+    FE function for the solution fields currently requires
+    a linear solve, which is performed using the spline object's solver,
+    if any.
+    """
+    def __init__(self,spline,residual,tangent,solution,**kwargs):
+        """
+        The argument ``spline`` is an ``ExtractedSpline`` on which the
+        problem is solved.  ``residual`` is the residual form of the problem.
+        ``tangent`` is the Jacobian of this form.  ``solution`` is a 
+        ``Function`` in ``spline.V``.  Additional keyword arguments will be
+        passed to the superclass constructor.
+        """
+        super(ExtractedNonlinearProblem, self).__init__(**kwargs)
+        self.spline = spline
+        self.solution = solution
+        self.residual = residual
+        self.tangent = tangent
+
+    # Override methods from NonlinearProblem to perform extraction:
+    def form(self,A,P,B,x):
+        self.solution.vector()[:] = self.spline.M*x
+    def F(self,b,x):
+        b[:] = self.spline.assembleVector(self.residual)
+        return b
+    def J(self,A,x):
+        M = self.spline.assembleMatrix(self.tangent).mat()
+        A.mat().setSizes(M.getSizes())
+        A.mat().setUp()
+        M.copy(result=A.mat())
+        return A
+
+class ExtractedNonlinearSolver:
+    """
+    Class encapsulating the extra work surrounding a nonlinear solve when
+    the problem is posed on an ``ExtractedSpline``.
+    """
+    def __init__(self,problem,solver):
+        """
+        ``problem`` is an ``ExtractedNonlinearProblem``, while ``solver`` 
+        is either a ``NewtonSolver`` or a ``PETScSNESSolver``
+        that will be used behind the scenes.
+        """
+        self.problem = problem
+        self.solver = solver
+        
+    def solve(self):
+        """
+        This method solves ``self.problem``, using ``self.solver`` and updating 
+        ``self.problem.solution`` with the solution (in extracted FE 
+        representation).
+        """
+
+        # Need to solve a linear problem for initial guess for IGA DoFs; any
+        # way around this?
+        
+        tempFunc = Function(self.problem.spline.V)
+        tempFunc.assign(self.problem.solution)
+        # RHS of problem for initial guess IGA DoFs:
+        MTtemp = self.problem.spline.extractVector(tempFunc.vector(),
+                                                   applyBCs=False)
+        # Vector with right dimension for IGA DoFs (content doesn't matter):
+        tempVec = self.problem.spline.extractVector(tempFunc.vector())
+        # LHS of problem for initial guess:
+        Mm = as_backend_type(self.problem.spline.M).mat()
+        MTMm = Mm.transposeMatMult(Mm)
+        MTM = PETScMatrix(MTMm)
+        if(self.problem.spline.linearSolver == None):
+            solve(MTM,tempVec,MTtemp)
+        else:
+            self.problem.spline.linearSolver.solve(MTM,tempVec,MTtemp)
+        self.solver.solve(self.problem,tempVec)
+        self.problem.solution.vector()[:] = self.problem.spline.M*tempVec
+
+        
 #class SplineDisplacementExpression(Expression):
 #
 #    """
