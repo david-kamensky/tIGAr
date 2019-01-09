@@ -7,6 +7,8 @@ implementing demos.
 """
 
 from tIGAr.common import *
+from tIGAr.calculusUtils import getQuadRule
+from ufl import shape, rank
 
 class BackwardEulerIntegrator:
 
@@ -226,3 +228,121 @@ class GeneralizedAlphaIntegrator:
             self.xddot_old.assign(xddot_old)
         self.t += float(self.DELTA_T)
 
+class LinearDGSpaceTimeIntegrator:
+    """
+    Third-order accurate space--time DG using linear shape functions in time.  
+    """
+
+    def __init__(self,DELTA_T,x,x_old,t=0.0,nTimeQuadPts=2):
+        """
+        The arguments ``x`` and ``x_old`` are the current and previous time
+        slab unknowns, represented as ``Function`` objects in a mixed
+        function space with an even number of scalar fields, in which 
+        the first half of the fields represent the values at nodes on the past 
+        edge of the slab and the second half represent values at nodes on the
+        future edge of the slab.  ``DELTA_T`` is the duration of each time
+        slab and ``nTimeQuadPts`` is the number of (Gaussian) quadrature
+        points used to integrate along the time direction.  The optional 
+        parameter ``t`` is the time at the past edge of the first time slab.
+        """
+        # Quadrature rule in the parametric coordinates [-1,1] of the
+        # time slab:
+        self.quadPts,self.quadWts = getQuadRule(nTimeQuadPts)
+        self.nTimeQuadPts = nTimeQuadPts
+        self.DELTA_T = DELTA_T
+        # Time at beginning of current slab:
+        self.t_n = t
+        self.x = x
+        self.x_old = x_old
+        
+    # Shape functions in time, not intended for use outside of class:
+    def N_hat_0(self,xi):
+        return 0.5*(1.0-xi)
+    def N_hat_1(self,xi):
+        return 0.5*(1.0+xi)
+
+    # Coefficients in x corresponding to temporal shape function i, not
+    # intended for use outside of class:
+    def x_i(self,x,i):
+        N = shape(x)[0]
+        n = N//2
+        l = []
+        for j in range(i*n,(i+1)*n):
+            l += [x[j],]
+        if(n==1):
+            return l[0]
+        return as_vector(l)
+
+    def t_hat_to_t(self,t_hat):
+        """
+        Map parametric time ``t_hat`` in (-1,1) to physical time.
+        """
+        a = 0.5*(t_hat+1.0)
+        return a*(self.t_n+self.DELTA_T) + (1.0-a)*(self.t_n)
+
+    def t_to_t_hat(self,t):
+        """
+        Inverse of ``t_hat_to_t``.
+        """
+        a = (t-self.t_n)/self.DELTA_T
+        return a + (1.0-a)*(-1.0)
+        
+    def int_dt(self,form):
+        """
+        Integrates in the time direction over the current slab. 
+        The argument ``form`` is assumed to be a Python function taking a 
+        single argument (interpreted as physical time) and returning 
+        a UFL ``Form`` integrated in space.  
+
+        Returns:  A UFL ``Form`` that is a weighted sum of ``form`` 
+        evaluated at quadrature points through the slab.
+        """
+        retval = 0 # optimized away by form compiler
+        for i in range(0,self.nTimeQuadPts):
+            w = 0.5*self.DELTA_T*self.quadWts[i]
+            t = self.t_hat_to_t(self.quadPts[i])            
+            retval += w*form(t)
+        return retval
+
+    def f(self,x):
+        """
+        Returns a Python function mapping physical time values to evaluations
+        of the field ``x`` within the current time slab.
+        """
+        def f(t):
+            t_hat = self.t_to_t_hat(t)
+            x0 = self.x_i(x,0)
+            x1 = self.x_i(x,1)
+            return x0*self.N_hat_0(t_hat) + x1*self.N_hat_1(t_hat)
+        return f
+
+    # In a more general space--time implementation with higher-order
+    # temporal functions, this should also return a Python function, like
+    # self.f().
+    def f_t(self,x):
+        """
+        Returns the (constant w.r.t. time) temporal partial derivative of 
+        a space--time finite element function ``x``.
+        """
+        return (self.x_i(x,1)-self.x_i(x,0))/self.DELTA_T
+
+    def atFutureBdry(self,x):
+        """
+        Return the field ``x`` evaluated at the future boundary of a time 
+        slab.
+        """
+        return self.x_i(x,1)
+    
+    def atPastBdry(self,x):
+        """
+        Return the field ``x`` evaluated at the past boundary of a time slab.
+        """
+        return self.x_i(x,0)
+
+    def advance(self):
+        """
+        Advance to the next time slab.
+        """
+        self.x_old.assign(self.x)
+        self.t_n += float(self.DELTA_T)
+            
