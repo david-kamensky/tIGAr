@@ -109,9 +109,9 @@ class GeneralizedAlphaIntegrator:
     def __init__(self,RHO_INF,DELTA_T,x,oldFunctions,t=0.0,
                  useFirstOrderAlphaM=False):
         """
-        Sets up a time integrator with spectral radius
+        Sets up a time integrator with amplification matrix spectral radius
         ``RHO_INF`` in the limit of time step ``DELTA_T`` going to
-        zero.  The unknown ``Function`` is ``x``, and a sequence of 
+        infinity.  The unknown ``Function`` is ``x``, and a sequence of 
         ``Function`` objects, ``oldFunctions``, provide data from 
         the previous time step.
         If ``oldFunctions`` contains two functions, then these are 
@@ -128,10 +128,10 @@ class GeneralizedAlphaIntegrator:
         NOTE: This includes the implicit midpoint rule as a special case, 
         i.e., ``RHO_INF=1.0``.
 
-        NOTE: Specifying the initial velocity and acceleration of second-order
-        problem over-determines it.  The initial acceleration should be set
-        in a way that is compatible with the other initial data and the
-        governing equation.
+        NOTE: Specifying the initial velocity and acceleration of a 
+        second-order problem over-determines it.  The initial acceleration 
+        should be set in a way that is compatible with the other initial 
+        data and the governing equation.
         """
         self.RHO_INF = RHO_INF
         self.DELTA_T = DELTA_T
