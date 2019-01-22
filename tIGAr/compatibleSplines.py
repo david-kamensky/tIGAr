@@ -88,8 +88,8 @@ class BSplineCompat(AbstractMultiFieldSpline):
             self.periodicities = args[3]
         else:
             self.periodicities = None
-        self.fields = generateFieldsCompat(self.controlMesh,self.RTorN,\
-                                           self.degrees,\
+        self.fields = generateFieldsCompat(self.controlMesh,self.RTorN,
+                                           self.degrees,
                                            periodicities=self.periodicities)
     def getControlMesh(self):
         return self.controlMesh
@@ -100,6 +100,100 @@ class BSplineCompat(AbstractMultiFieldSpline):
     def getNFields(self):
         return len(self.fields)
 
+# TODO: Think of a nice way to control whether the LHS form is
+# re-assembled each iteration.
+def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=div,
+                         penalty=DEFAULT_RT_PENALTY,
+                         w=None):
+    """
+    Use the iterated penalty method to find a solution to the 
+    problem given by ``residualForm``, while constraining the test and
+    trial functions (``u`` and ``v``) to solenoidal subspaces of 
+    ``spline.V``, where ``spline`` is an ``ExtractedSpline``. 
+    The argument ``divOp`` optionally allows a custom 
+    function to be passed as the divergence operator.  By default, it is
+    the standard UFL ``div`` operator, which, in ``tIGAr``, acts on the 
+    spline's parameter space, which is not necessarily physical space.  
+    Making the ``penalty`` larger can speed up convergence,
+    at the cost of worse linear algebra conditioning.  The optional
+    parameter ``w`` allows for a nonzero initial guess for the 
+    pressure (in the form of a velocity function in the RT-type space
+    whose divergence serves as a pressure).  The idea is that, when time
+    stepping, the final ``w`` from the previous step  will be an accurate 
+    initial guess for the current step.  If nothing is passed ``w`` 
+    will be initialized to zero.  
+
+    For details and analysis of the iterated penalty method, see
+
+    https://epubs.siam.org/doi/10.1137/16M1103117
+
+    NOTE: This algorithm was developed for linear problems, but we also
+    apply it in an ad hoc manner to nonlinear problems, by essentially
+    performing one multiplier update per Newton step.  This appears to
+    be effective in practice.  
+    """
+
+    # augmented problem
+    if(w==None):
+        w = Function(spline.V)
+
+    augmentation = penalty*divOp(u)*divOp(v)*spline.dx \
+                   + divOp(w)*divOp(v)*spline.dx
+    residualFormAug = residualForm + augmentation
+    JAug = derivative(residualFormAug,u)
+
+    # TODO: Think more about implementing separate tolerances for
+    # momentum and continuity residuals.
+    converged = False
+    for i in range(0,spline.maxIters):
+        MTAM,MTb = spline.assembleLinearSystem(JAug,residualFormAug)
+
+        currentNorm = norm(MTb)
+        if(i==0):
+            initialNorm = currentNorm
+        relativeNorm = currentNorm/initialNorm
+        if(mpirank == 0):
+            print("Solver iteration: "+str(i)+" , Relative norm: "
+                  + str(relativeNorm))
+            sys.stdout.flush()
+        if(currentNorm/initialNorm < spline.relativeTolerance):
+            converged = True
+            break
+        du = Function(spline.V)
+        #du.assign(Constant(0.0)*du)
+        spline.solveLinearSystem(MTAM,MTb,du)
+        #as_backend_type(u.vector()).vec().assemble()
+        #as_backend_type(du.vector()).vec().assemble()
+        u.assign(u-du)
+        w.assign(w+penalty*u)
+    if(not converged):
+        print("ERROR: Iterated penalty solver failed to converge.")
+        exit()
+        
+def divFreeProject(toProject,spline,
+                   getVelocity=lambda x:x,
+                   penalty=DEFAULT_RT_PENALTY,w=None):
+    """
+    Project some expression ``toProject`` onto a solenoidal subspace of
+    ``spline.V``, using the iterated penalty method with an
+    optionally-specified ``penalty``.  The optional parameter ``getVelocity`` 
+    (defaulting to identity) maps ``Function`` objects in ``spline.V`` to
+    vector fields that should be divergence-free in the parametric domain.  
+    The optional parameter ``w`` is a ``Function`` that can 
+    contain an initial guess for (and/or provide the final value of) 
+    the pressure associated with the projection.
+    """
+    u_hat = Function(spline.V)
+    v_hat = TestFunction(spline.V)
+    u = cartesianPushforwardRT(getVelocity(u_hat),spline.F)
+    v = cartesianPushforwardRT(getVelocity(v_hat),spline.F)
+    res = inner(u-toProject,v)*spline.dx
+    iteratedDivFreeSolve(res,u_hat,v_hat,spline,
+                         divOp=lambda up : div(getVelocity(up)),
+                         penalty=penalty,w=w)
+    return u_hat
+
+# TODO: Deprecate this class, update demos
 class ExtractedBSplineRT(ExtractedSpline):
     """
     Subclass of ``ExtractedSpline`` offering some specializations to the
@@ -116,89 +210,23 @@ class ExtractedBSplineRT(ExtractedSpline):
             F = self.F
         return cartesianPushforwardRT(uhat,F)
 
-    # TODO: Think of a nice way to control whether the LHS form is
-    # re-assembled each iteration.
     def iteratedDivFreeSolve(self,residualForm,u,v,
                              penalty=DEFAULT_RT_PENALTY,
                              w=None):
         """
-        Use the iterated penalty method to find a solution to the 
-        problem given by ``residualForm``, while constraining the test and
-        trial functions (``u`` and ``v``) to solenoidal subspaces of 
-        ``spline.V``.  Making the ``penalty`` larger can speed up convergence,
-        at the cost of worse linear algebra conditioning.  The optional
-        parameter ``w`` allows for a nonzero initial guess for the 
-        pressure (in the form of a velocity function in the RT-type space
-        whose divergence serves as a pressure).  The idea is that, when time
-        stepping, the final ``w`` from the previous step  will be an accurate 
-        initial guess for the current step.  If nothing is passed ``w`` 
-        will be initialized to zero.  
-
-        For details and analysis of the iterated penalty method, see
-
-        https://epubs.siam.org/doi/10.1137/16M1103117
-
-        NOTE: This algorithm was developed for linear problems, but we also
-        apply it in an ad hoc manner to nonlinear problems, by essentially
-        performing one multiplier update per Newton step.  This appears to
-        be effective in practice.  
+        Wrapper for free function ``iteratedDivFreeSolve``, largely included
+        for backward compatibility.
         """
-        
-        # augmented problem
-        if(w==None):
-            w = Function(self.V)
-
-        # just penalize directly in parametric domain, because... why not?
-        augmentation = penalty*div(u)*div(v)*self.dx \
-                       + div(w)*div(v)*self.dx
-        residualFormAug = residualForm + augmentation
-        JAug = derivative(residualFormAug,u)
-
-        # TODO: Think more about implementing separate tolerances for
-        # momentum and continuity residuals.
-        converged = False
-        for i in range(0,self.maxIters):
-            MTAM,MTb = self.assembleLinearSystem(JAug,residualFormAug)
-
-            currentNorm = norm(MTb)
-            if(i==0):
-                initialNorm = currentNorm
-            relativeNorm = currentNorm/initialNorm
-            if(mpirank == 0):
-                print("Solver iteration: "+str(i)+" , Relative norm: "\
-                      + str(relativeNorm))
-                sys.stdout.flush()
-            if(currentNorm/initialNorm < self.relativeTolerance):
-                converged = True
-                break
-            du = Function(self.V)
-            #du.assign(Constant(0.0)*du)
-            self.solveLinearSystem(MTAM,MTb,du)
-            #as_backend_type(u.vector()).vec().assemble()
-            #as_backend_type(du.vector()).vec().assemble()
-            u.assign(u-du)
-            w.assign(w+penalty*u)
-        if(not converged):
-            print("ERROR: Iterated penalty solver failed to converge.")
-            exit()
+        iteratedDivFreeSolve(residualForm,u,v,self,penalty=penalty,w=w)
 
     def divFreeProject(self,toProject,penalty=DEFAULT_RT_PENALTY,w=None):
         """
-        Project some expression ``toProject`` onto a solenoidal subspace of
-        ``spline.V``, using the iterated penalty method with an
-        optionally-specified ``penalty``.  The optional parameter ``w`` 
-        is a ``Function`` that can contain an initial guess for (and/or 
-        provide the final value of) the pressure associated with the 
-        projection.
+        Wrapper for free function ``divFreeProject``, largely included
+        for backward compatibility.
         """
-        uhat = Function(self.V)
-        vhat = TestFunction(self.V)
-        u = self.pushforward(uhat)
-        v = self.pushforward(vhat)
-        res = inner(u-toProject,v)*self.dx
-        self.iteratedDivFreeSolve(res,uhat,vhat,penalty,w)
-        return uhat
+        return divFreeProject(toProject,self,penalty=penalty,w=w)
 
+# TODO: Deprecate this class, update demos
 class ExtractedBSplineN(ExtractedSpline):
     """
     Subclass of ``ExtractedSpline`` offering some specializations to the
@@ -214,6 +242,7 @@ class ExtractedBSplineN(ExtractedSpline):
             F = self.F
         return cartesianPushforwardN(Ahat,F)
 
+    # TODO: Move to free function
     def projectCurl(self,toProject,applyBCs=False):
         """
         Project ``toProject`` onto the curl of a vector potential in 
