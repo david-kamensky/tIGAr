@@ -1268,26 +1268,27 @@ class ExtractedSpline(object):
         self.relativeTolerance = relativeTolerance
         self.linearSolver = linearSolver
 
-    # couldn't figure out how to get subclassing NonlinearProblem to work...
-    def solveNonlinearVariationalProblem(self,residualForm,J,u):
+    def solveNonlinearVariationalProblem(self,residualForm,J,u,
+                                         referenceError=None):
         """
         Solves a nonlinear variational problem with residual given by 
         ``residualForm``.  ``J`` is the functional derivative of 
         the residual w.r.t. the solution, ``u``, or some user-defined
-        approximation thereof.
+        approximation thereof.  Optionally, a given ``referenceError`` can be
+        used instead of the initial residual norm to compute relative errors.
         """
         converged = False
         for i in range(0,self.maxIters):
             MTAM,MTb = self.assembleLinearSystem(J,residualForm)
             currentNorm = norm(MTb)
-            if(i==0):
-                initialNorm = currentNorm
-            relativeNorm = currentNorm/initialNorm
+            if(i==0 and referenceError==None):
+                referenceError = currentNorm
+            relativeNorm = currentNorm/referenceError
             if(MPI.rank(self.comm) == 0):
                 print("Solver iteration: "+str(i)+" , Relative norm: "\
                       + str(relativeNorm))
                 sys.stdout.flush()
-            if(currentNorm/initialNorm < self.relativeTolerance):
+            if(relativeNorm < self.relativeTolerance):
                 converged = True
                 break
             du = Function(self.V)
