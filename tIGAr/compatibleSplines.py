@@ -100,11 +100,9 @@ class BSplineCompat(AbstractMultiFieldSpline):
     def getNFields(self):
         return len(self.fields)
 
-# TODO: Think of a nice way to control whether the LHS form is
-# re-assembled each iteration.
-def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=div,
+def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
                          penalty=DEFAULT_RT_PENALTY,
-                         w=None):
+                         w=None,J=None,reuseLHS=True):
     """
     Use the iterated penalty method to find a solution to the 
     problem given by ``residualForm``, while constraining the test and
@@ -112,8 +110,8 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=div,
     ``spline.V``, where ``spline`` is an ``ExtractedSpline``. 
     The argument ``divOp`` optionally allows a custom 
     function to be passed as the divergence operator.  By default, it is
-    the standard UFL ``div`` operator, which, in ``tIGAr``, acts on the 
-    spline's parameter space, which is not necessarily physical space.  
+    the physical divergence ``spline.div``, but this may not make sense
+    if fields other than the velocity components are part of the spline space.
     Making the ``penalty`` larger can speed up convergence,
     at the cost of worse linear algebra conditioning.  The optional
     parameter ``w`` allows for a nonzero initial guess for the 
@@ -121,7 +119,11 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=div,
     whose divergence serves as a pressure).  The idea is that, when time
     stepping, the final ``w`` from the previous step  will be an accurate 
     initial guess for the current step.  If nothing is passed ``w`` 
-    will be initialized to zero.  
+    will be initialized to zero.  The optional argument ``J`` is a custom
+    Jacobian for ``residualForm``, defaulting to ``None``, in which case
+    ``derivative(residualForm,u)`` is used.  For nonlinear problems, one
+    can optionally set ``reuseLHS`` to ``False``, to re-assemble the tangent 
+    matrix in each penalty iteration.
 
     For details and analysis of the iterated penalty method, see
 
@@ -133,6 +135,15 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=div,
     be effective in practice.  
     """
 
+    if(divOp==None):
+        # It is more efficient on explicit splines to directly use the
+        # parameteric div operator.  It is still correct to use parametric
+        # div on deformed splines, because the Piola transform is
+        # div-conserving, but the penalty may not control the physical
+        # divergence evenly on nonuniform meshes.
+        divOp = lambda u_hat : \
+                spline.div(cartesianPushforwardRT(u_hat,spline.F))
+    
     # augmented problem
     if(w==None):
         w = Function(spline.V)
@@ -140,13 +151,19 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=div,
     augmentation = penalty*divOp(u)*divOp(v)*spline.dx \
                    + divOp(w)*divOp(v)*spline.dx
     residualFormAug = residualForm + augmentation
-    JAug = derivative(residualFormAug,u)
+    if(J==None):
+        JAug = derivative(residualFormAug,u)
+    else:
+        JAug = J + derivative(augmentation,u)
 
     # TODO: Think more about implementing separate tolerances for
     # momentum and continuity residuals.
     converged = False
     for i in range(0,spline.maxIters):
-        MTAM,MTb = spline.assembleLinearSystem(JAug,residualFormAug)
+        #MTAM,MTb = spline.assembleLinearSystem(JAug,residualFormAug)
+        MTb = spline.assembleVector(residualFormAug)
+        if(i==0 or (not reuseLHS)):
+            MTAM = spline.assembleMatrix(JAug)
 
         currentNorm = norm(MTb)
         if(i==0):
