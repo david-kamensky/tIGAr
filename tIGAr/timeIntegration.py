@@ -207,6 +207,24 @@ class GeneralizedAlphaIntegrator:
         """
         return x_alpha(self.ALPHA_M,self.xddot(),self.xddot_old)
 
+    def sameVelocityPredictor(self):
+        """
+        Returns a same-velocity predictor for the unknown, where, by
+        analogy to solids and fluids as prototypical second- and first-order
+        systems, velocity is understood as `self.xdot` for second-order 
+        systems and `self.x` for first-order systems (making this trivial 
+        for first-order systems).
+        """
+        if(self.systemOrder == 1):
+            return self.x
+        return self.x_old + Constant(self.DELTA_T)*self.xdot_old \
+            + Constant(0.5*(self.DELTA_T**2)
+                       *((1.0-2.0*self.BETA)
+                         + 2.0*self.BETA*(self.GAMMA-1.0)
+                         /self.GAMMA))*self.xddot_old
+
+    # TODO: Implement same-acceleration predictor
+                       
     def advance(self):
         """
         Overwrites the data from the previous time step with the
