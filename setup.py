@@ -9,7 +9,7 @@ def read(fname):
 
 setup(
     name='tIGAr',
-    version='2018.1',
+    version='2019.1',
     packages=['tIGAr'],
     url='https://github.com/david-kamensky/tIGAr',
     license='GNU LGPLv3',
