@@ -102,7 +102,7 @@ class BSplineCompat(AbstractMultiFieldSpline):
 
 def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
                          penalty=DEFAULT_RT_PENALTY,
-                         w=None,J=None,reuseLHS=True):
+                         w=None,J=None,reuseLHS=True,applyBCs=True):
     """
     Use the iterated penalty method to find a solution to the 
     problem given by ``residualForm``, while constraining the test and
@@ -123,7 +123,9 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
     Jacobian for ``residualForm``, defaulting to ``None``, in which case
     ``derivative(residualForm,u)`` is used.  For nonlinear problems, one
     can optionally set ``reuseLHS`` to ``False``, to re-assemble the tangent 
-    matrix in each penalty iteration.
+    matrix in each penalty iteration.  The optional Boolean parameter 
+    ``applyBCs`` indicates whether or not to apply Dirichlet boundary 
+    conditions.
 
     For details and analysis of the iterated penalty method, see
 
@@ -161,9 +163,9 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
     converged = False
     for i in range(0,spline.maxIters):
         #MTAM,MTb = spline.assembleLinearSystem(JAug,residualFormAug)
-        MTb = spline.assembleVector(residualFormAug)
+        MTb = spline.assembleVector(residualFormAug,applyBCs=applyBCs)
         if(i==0 or (not reuseLHS)):
-            MTAM = spline.assembleMatrix(JAug)
+            MTAM = spline.assembleMatrix(JAug,applyBCs=applyBCs)
 
         currentNorm = norm(MTb)
         if(i==0):
@@ -186,10 +188,14 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
     if(not converged):
         print("ERROR: Iterated penalty solver failed to converge.")
         exit()
-        
+
+# TODO: Think of a non-intrusive way to "pin down" any other DoFs that
+# are ignored by getVelocity().  The current implementation works fine
+# for my favorite iterative solvers, but the default returns nan with
+# direct solvers when there are extraneous DoFs.
 def divFreeProject(toProject,spline,
                    getVelocity=lambda x:x,
-                   penalty=DEFAULT_RT_PENALTY,w=None):
+                   penalty=DEFAULT_RT_PENALTY,w=None,applyBCs=True):
     """
     Project some expression ``toProject`` onto a solenoidal subspace of
     ``spline.V``, using the iterated penalty method with an
@@ -198,7 +204,9 @@ def divFreeProject(toProject,spline,
     vector fields that should be divergence-free in the parametric domain.  
     The optional parameter ``w`` is a ``Function`` that can 
     contain an initial guess for (and/or provide the final value of) 
-    the pressure associated with the projection.
+    the pressure associated with the projection.  The optional Boolean argument
+    ``applyBCs`` indicates whether or not to apply Dirichlet boundary
+    conditions.
     """
     u_hat = Function(spline.V)
     v_hat = TestFunction(spline.V)
@@ -207,7 +215,7 @@ def divFreeProject(toProject,spline,
     res = inner(u-toProject,v)*spline.dx
     iteratedDivFreeSolve(res,u_hat,v_hat,spline,
                          divOp=lambda up : div(getVelocity(up)),
-                         penalty=penalty,w=w)
+                         penalty=penalty,w=w,applyBCs=applyBCs)
     return u_hat
 
 # TODO: Deprecate this class, update demos
@@ -229,19 +237,22 @@ class ExtractedBSplineRT(ExtractedSpline):
 
     def iteratedDivFreeSolve(self,residualForm,u,v,
                              penalty=DEFAULT_RT_PENALTY,
-                             w=None):
+                             w=None,applyBCs=True):
         """
         Wrapper for free function ``iteratedDivFreeSolve``, largely included
         for backward compatibility.
         """
-        iteratedDivFreeSolve(residualForm,u,v,self,penalty=penalty,w=w)
+        iteratedDivFreeSolve(residualForm,u,v,self,penalty=penalty,w=w,
+                             applyBCs=applyBCs)
 
-    def divFreeProject(self,toProject,penalty=DEFAULT_RT_PENALTY,w=None):
+    def divFreeProject(self,toProject,penalty=DEFAULT_RT_PENALTY,w=None,
+                       applyBCs=True):
         """
         Wrapper for free function ``divFreeProject``, largely included
         for backward compatibility.
         """
-        return divFreeProject(toProject,self,penalty=penalty,w=w)
+        return divFreeProject(toProject,self,penalty=penalty,w=w,
+                              applyBCs=applyBCs)
 
 # TODO: Deprecate this class, update demos
 class ExtractedBSplineN(ExtractedSpline):
