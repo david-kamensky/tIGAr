@@ -1,0 +1,33 @@
+Bootstrap: docker
+From: quay.io/fenicsproject/stable:current
+
+####### Notes #######
+#
+# This is a Singularity recipe that adds TSFC, tIGAr, and igakit to a
+# Docker container with the current stable version of FEniCS.  (TSFC is not
+# strictly required for tIGAr, but may be useful for some complicated
+# variational forms.)
+#
+# To build an image from this recipe, use the following command (on a
+# system where you have sudo access):
+#
+# $ sudo singularity build image.simg singularity-recipe.def
+#
+# "image.simg" may be replaced with the desired file name for the image.
+# This image will be usable with later versions of singularity, but is NOT
+# necessarily backwards-compatible with earlier versions.  
+#
+# On some systems, it may be necessary to mount a custom home
+# directory at runtime (with the -H option), to avoid conficts with
+# software installed in your home directory (which is mounted by default).
+#
+#####################
+
+%post
+    pip3 install git+https://github.com/blechta/tsfc.git@2018.1.0
+    pip3 install git+https://github.com/blechta/COFFEE.git@2018.1.0
+    pip3 install git+https://github.com/blechta/FInAT.git@2018.1.0
+    pip3 install singledispatch networkx pulp
+    pip3 install git+https://github.com/david-kamensky/tIGAr.git
+    pip3 install https://bitbucket.org/dalcinl/igakit/get/default.tar.gz
+    pip3 install --force-reinstall scipy
