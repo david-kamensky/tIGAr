@@ -189,12 +189,9 @@ def iteratedDivFreeSolve(residualForm,u,v,spline,divOp=None,
         print("ERROR: Iterated penalty solver failed to converge.")
         exit()
 
-# TODO: Think of a non-intrusive way to "pin down" any other DoFs that
-# are ignored by getVelocity().  The current implementation works fine
-# for my favorite iterative solvers, but the default returns nan with
-# direct solvers when there are extraneous DoFs.
 def divFreeProject(toProject,spline,
                    getVelocity=lambda x:x,
+                   getOtherFields=None,
                    penalty=DEFAULT_RT_PENALTY,w=None,applyBCs=True):
     """
     Project some expression ``toProject`` onto a solenoidal subspace of
@@ -202,6 +199,12 @@ def divFreeProject(toProject,spline,
     optionally-specified ``penalty``.  The optional parameter ``getVelocity`` 
     (defaulting to identity) maps ``Function`` objects in ``spline.V`` to
     vector fields that should be divergence-free in the parametric domain.  
+    The parameter ``getOtherFields``, if non-``None``, maps ``Function`` 
+    objects in ``spline.V`` to a quantity that will be set to zero in an
+    L^2 sense.  (This is intended to select fields other than the vector field
+    returned by ``getVelocity``; if the default identity map for 
+    ``getVelocity`` is used, then ``None`` is a sensible
+    default to use simultaneously for ``getOtherFields``.)
     The optional parameter ``w`` is a ``Function`` that can 
     contain an initial guess for (and/or provide the final value of) 
     the pressure associated with the projection.  The optional Boolean argument
@@ -213,6 +216,10 @@ def divFreeProject(toProject,spline,
     u = cartesianPushforwardRT(getVelocity(u_hat),spline.F)
     v = cartesianPushforwardRT(getVelocity(v_hat),spline.F)
     res = inner(u-toProject,v)*spline.dx
+    if(getOtherFields != None):
+        p = getOtherFields(u_hat)
+        q = getOtherFields(v_hat)
+        res += inner(p,q)*spline.dx
     iteratedDivFreeSolve(res,u_hat,v_hat,spline,
                          divOp=lambda up : div(getVelocity(up)),
                          penalty=penalty,w=w,applyBCs=applyBCs)
