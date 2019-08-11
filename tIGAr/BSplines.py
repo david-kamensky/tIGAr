@@ -675,6 +675,7 @@ class MultiBSpline(AbstractScalarBasis):
 
         self.nvar = self.splines[0].nvar
         self.useRect = self.splines[0].useRect
+        self.overRefine = self.splines[0].overRefine
         self.nPatch = len(self.splines)
         self.nel = self.computeNel()
 
@@ -866,7 +867,11 @@ class MultiBSpline(AbstractScalarBasis):
         if(MPI.rank(comm)==0):
             import os
             os.system("rm "+MESH_FILE_NAME)
-        
+
+        # Apply any over-refinement specified:
+        for i in range(0,self.overRefine):
+            mesh = refine(mesh)
+            
         return mesh
     
     def computeNcp(self):
@@ -909,7 +914,9 @@ class ExplicitBSplineControlMesh(AbstractControlMesh):
         of sequences ``kvecs``.  The optional Boolean parameter ``useRect``
         indicates whether or not to use rectangular FEs in the extraction.
         """
-        self.scalarSpline = BSpline(degrees,kvecs,useRect,overRefine)
+        self.scalarSpline = BSpline(degrees,kvecs,
+                                    useRect=useRect,
+                                    overRefine=overRefine)
         # parametric == physical
         self.nvar = len(degrees)
         self.nsd = self.nvar + extraDim
@@ -956,7 +963,9 @@ class LegacyMultipatchControlMesh(AbstractControlMesh):
     group at UT Austin.
     """
     
-    def __init__(self,prefix,nPatch,suffix,useRect=USE_RECT_ELEM_DEFAULT):
+    def __init__(self,prefix,nPatch,suffix,
+                 useRect=USE_RECT_ELEM_DEFAULT,
+                 overRefine=0):
         """
         Loads a collection of ``nPatch`` files with names of the form
         ``prefix+str(i+1)+suffix``, for ``i in range(0,nPatch)``, where each 
@@ -964,7 +973,10 @@ class LegacyMultipatchControlMesh(AbstractControlMesh):
         J. A. Cottrell's preprocessor.  (The ``+1`` in the file name 
         convention comes from Fortran indexing.)  The optional argument
         ``useRect`` is a Boolean, indicating whether or not to use
-        rectangular elements.
+        rectangular elements.  The optional argument ``overRefine`` can
+        specify a number of global refinements of the FE mesh used for
+        extraction.  (This does not refine the IGA space.)  Over-refinement
+        is only supported for simplicial elements.
 
         The parametric dimension is inferred from the contents of the first 
         file, and assumed to be the same for all patches.
@@ -1011,7 +1023,7 @@ class LegacyMultipatchControlMesh(AbstractControlMesh):
                 kvecs += [array(kvec),]
 
             # Use the knot vectors to create a B-spline basis for this patch
-            splines += [BSpline(degrees,kvecs,useRect),]
+            splines += [BSpline(degrees,kvecs,useRect,overRefine),]
 
             # Load control points
             ncp = 1
