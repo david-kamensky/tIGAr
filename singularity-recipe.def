@@ -29,5 +29,5 @@ From: quay.io/fenicsproject/stable:current
     pip3 install git+https://github.com/blechta/FInAT.git@2018.1.0
     pip3 install singledispatch networkx pulp
     pip3 install git+https://github.com/david-kamensky/tIGAr.git
-    pip3 install https://bitbucket.org/dalcinl/igakit/get/default.tar.gz
+    pip3 install https://bitbucket.org/dalcinl/igakit/get/master.tar.gz
     pip3 install --force-reinstall scipy
