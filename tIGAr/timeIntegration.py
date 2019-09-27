@@ -216,7 +216,7 @@ class GeneralizedAlphaIntegrator:
         for first-order systems).
         """
         if(self.systemOrder == 1):
-            return self.x
+            return self.x_old
         return self.x_old + Constant(self.DELTA_T)*self.xdot_old \
             + Constant(0.5*(self.DELTA_T**2)
                        *((1.0-2.0*self.BETA)
