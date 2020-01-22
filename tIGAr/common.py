@@ -1207,13 +1207,13 @@ class ExtractedSpline(object):
         """
         Solves a linear system of the form
 
-        ``MTAM*MTU = MTb``
+        ``MTAM*U = MTb``
 
-        where ``MTAM`` is the IGA LHS, ``MTU`` is the vector of IGA unknowns
+        where ``MTAM`` is the IGA LHS, ``U`` is the vector of IGA unknowns
         (in the homogeneous coordinate representation, if rational splines
         are being used), and ``MTb`` is the IGA RHS.  The FE representation 
         of the solution is then the ``Function`` ``u`` which has a vector 
-        of coefficients given by ``MT*MTU``.
+        of coefficients given by ``M*U``.
         """
         
         U = u.vector()
