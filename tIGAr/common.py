@@ -561,23 +561,25 @@ class ExtractedNonlinearSolver:
 
         # Need to solve a linear problem for initial guess for IGA DoFs; any
         # way around this?
+        tempVec = self.problem.spline.FEtoIGA(self.problem.solution)
         
-        tempFunc = Function(self.problem.spline.V)
-        tempFunc.assign(self.problem.solution)
-        # RHS of problem for initial guess IGA DoFs:
-        MTtemp = self.problem.spline.extractVector(tempFunc.vector(),
-                                                   applyBCs=False)
-        # Vector with right dimension for IGA DoFs (content doesn't matter):
-        tempVec = self.problem.spline.extractVector(tempFunc.vector())
-        # LHS of problem for initial guess:
-        Mm = as_backend_type(self.problem.spline.M).mat()
-        MTMm = Mm.transposeMatMult(Mm)
-        MTM = PETScMatrix(MTMm)
-        if(self.problem.spline.linearSolver == None):
-            solve(MTM,tempVec,MTtemp)
-        else:
-            self.problem.spline.linearSolver.solve(MTM,tempVec,MTtemp)
-        self.solver.solve(self.problem,tempVec)
+        #tempFunc = Function(self.problem.spline.V)
+        #tempFunc.assign(self.problem.solution)
+        ## RHS of problem for initial guess IGA DoFs:
+        #MTtemp = self.problem.spline.extractVector(tempFunc.vector(),
+        #                                           applyBCs=False)
+        ## Vector with right dimension for IGA DoFs (content doesn't matter):
+        #tempVec = self.problem.spline.extractVector(tempFunc.vector())
+        ## LHS of problem for initial guess:
+        #Mm = as_backend_type(self.problem.spline.M).mat()
+        #MTMm = Mm.transposeMatMult(Mm)
+        #MTM = PETScMatrix(MTMm)
+        #if(self.problem.spline.linearSolver == None):
+        #    solve(MTM,tempVec,MTtemp)
+        #else:
+        #    self.problem.spline.linearSolver.solve(MTM,tempVec,MTtemp)
+        #self.solver.solve(self.problem,tempVec)
+        
         self.problem.solution.vector()[:] = self.problem.spline.M*tempVec
 
         
@@ -962,6 +964,33 @@ class ExtractedSpline(object):
         self.V_displacement = FunctionSpace(self.mesh,self.VE_displacement)
         self.V_linear = FunctionSpace(self.mesh,self.VE_linear)
         
+    def FEtoIGA(self,u):
+        """
+        This solves the pseudoinverse problem to get the IGA degrees of
+        freedom from the finite element ones associated with ``u``, which
+        is a ``Function``.  It uses the ``self`` instance's linear solver
+        object if available.  The return value is a ``PETScVector`` of the
+        IGA degrees of freedom.
+
+        NOTE: This is inefficient and should rarely be necessary.  It is 
+        mainly intended for testing purposes, or as a last resort.
+        """
+        tempFunc = Function(self.V)
+        tempFunc.assign(u)
+        # RHS of problem for initial guess IGA DoFs:
+        MTtemp = self.extractVector(tempFunc.vector(),applyBCs=False)
+        # Vector with right dimension for IGA DoFs (content doesn't matter):
+        tempVec = self.extractVector(tempFunc.vector())
+        # LHS of problem for initial guess:
+        Mm = as_backend_type(self.M).mat()
+        MTMm = Mm.transposeMatMult(Mm)
+        MTM = PETScMatrix(MTMm)
+        if(self.linearSolver == None):
+            solve(MTM,tempVec,MTtemp)
+        else:
+            self.linearSolver.solve(MTM,tempVec,MTtemp)
+        return tempVec
+
     #def interpolateAsDisplacement(self,functionList=[]):
     #
     #    """
@@ -1213,7 +1242,8 @@ class ExtractedSpline(object):
         (in the homogeneous coordinate representation, if rational splines
         are being used), and ``MTb`` is the IGA RHS.  The FE representation 
         of the solution is then the ``Function`` ``u`` which has a vector 
-        of coefficients given by ``M*U``.
+        of coefficients given by ``M*U``.  The return value of the function
+        is ``U``, as a DOLFIN ``PETScVector``.
         """
         
         U = u.vector()
@@ -1228,6 +1258,8 @@ class ExtractedSpline(object):
         u.vector().set_local(((self.M)*MTU).get_local())
         as_backend_type(u.vector()).vec().ghostUpdate()
         as_backend_type(u.vector()).vec().assemble()
+        
+        return MTU
 
     
     def solveLinearVariationalProblem(self,residualForm,u,applyBCs=True):
@@ -1236,7 +1268,9 @@ class ExtractedSpline(object):
         putting the solution in the ``Function`` ``u``.  Homogeneous 
         Dirichlet BCs from ``self`` can be optionally applied, based on the
         Boolean parameter ``applyBCs``.  Note that ``residualForm`` may also
-        be given in the form of a UFL ``Equation``, e.g., ``lhs==rhs``.  
+        be given in the form of a UFL ``Equation``, e.g., ``lhs==rhs``.  The
+        return value of the function is the vector of IGA degrees of freedom,
+        as a DOLFIN ``PETScVector``.  
         """
         
         if(isinstance(residualForm,ufl.equation.Equation)):
@@ -1252,9 +1286,7 @@ class ExtractedSpline(object):
             rhsForm = Constant(0.0)*v[0]*self.dx
         
         MTAM,MTb = self.assembleLinearSystem(lhsForm,rhsForm,applyBCs)
-        self.solveLinearSystem(MTAM,MTb,u)
-        
-        #return self.rationalize(u)
+        return self.solveLinearSystem(MTAM,MTb,u)
 
     def setSolverOptions(self,\
                          maxIters=20,\
@@ -1269,14 +1301,28 @@ class ExtractedSpline(object):
         self.linearSolver = linearSolver
 
     def solveNonlinearVariationalProblem(self,residualForm,J,u,
-                                         referenceError=None):
+                                         referenceError=None,
+                                         igaDoFs=None):
         """
         Solves a nonlinear variational problem with residual given by 
         ``residualForm``.  ``J`` is the functional derivative of 
         the residual w.r.t. the solution, ``u``, or some user-defined
         approximation thereof.  Optionally, a given ``referenceError`` can be
         used instead of the initial residual norm to compute relative errors.
+        Optionally, an initial guess can be provided directly as a DOLFIN
+        ``PETScVector`` of IGA degrees of freedom, which will override
+        whatever is in the vector of FE coefficients for ``u`` as the
+        initial guess.  If this argument is passed, it is also overwritten 
+        by the IGA degrees of freedom for the nonlinear problem's solution.  
         """
+        returningDoFs = not isinstance(igaDoFs,type(None))
+        if(returningDoFs):
+            # Overwrite content of u with extraction of igaDoFs.
+            u.vector().set_local(((self.M)*igaDoFs).get_local())
+            as_backend_type(u.vector()).vec().ghostUpdate()
+            as_backend_type(u.vector()).vec().assemble()
+            
+        # Newton iteration loop:
         converged = False
         for i in range(0,self.maxIters):
             MTAM,MTb = self.assembleLinearSystem(J,residualForm)
@@ -1292,15 +1338,14 @@ class ExtractedSpline(object):
                 converged = True
                 break
             du = Function(self.V)
-            #du.assign(Constant(0.0)*du)
-            self.solveLinearSystem(MTAM,MTb,du)
-            #as_backend_type(u.vector()).vec().assemble()
-            #as_backend_type(du.vector()).vec().assemble()
+            igaIncrement = self.solveLinearSystem(MTAM,MTb,du)
             u.assign(u-du)
+            if(returningDoFs):
+                igaDoFs -= igaIncrement
         if(not converged):
             print("ERROR: Nonlinear solver failed to converge.")
             exit()
-
+            
     # project a scalar onto linears for plotting
     def projectScalarOntoLinears(self,toProject,linearSolver=None,
                                  lumpMass=False):
