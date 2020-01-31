@@ -103,8 +103,8 @@ def multTranspose(M,b):
     comm = as_backend_type(M).mat().getComm()
     MTbv = PETSc.Vec(comm)
     MTbv.create(comm=comm)
-    MTbv.setUp()
     MTbv.setSizes(totalDofs)
+    MTbv.setUp()
     as_backend_type(M).mat().multTranspose(as_backend_type(b).vec(),MTbv)
     return PETScVector(MTbv)
 
