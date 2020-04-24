@@ -578,7 +578,7 @@ class ExtractedNonlinearSolver:
         #    solve(MTM,tempVec,MTtemp)
         #else:
         #    self.problem.spline.linearSolver.solve(MTM,tempVec,MTtemp)
-        #self.solver.solve(self.problem,tempVec)
+        self.solver.solve(self.problem,tempVec)
         
         self.problem.solution.vector()[:] = self.problem.spline.M*tempVec
 
