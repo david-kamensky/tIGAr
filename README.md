@@ -35,6 +35,7 @@ The most convenient way to use FEniCS (and therefore tIGAr) on HPC clusters is v
 ### Common installation issues
 * `petsc4py.PETSc.Mat object has no attribute PtAP`: This is due to an old version of `petsc4py`.  Try installing the latest version via `pip3`.
 * `ImportError: No module named dolfin`: This occurs when attempting to use `python` rather than `python3`.  FEniCS 2018.1 and newer no longer support Python 2.
+* `Python.h: No such file or directory`: This requires installing the header files for the Python C API.  On Ubuntu, these can be installed via `sudo apt-get install python3-dev`.
 * `ModuleNotFoundError: No module named 'scipy._lib.decorator'`: Try re-installing SciPy, which can be done with the command `pip3 install --force-reinstall scipy`.
 * Errors due to old versions of FEniCS: Run `dolfin-version` in a terminal to check your version of FEniCS.  Note in particular that Ubuntu PPAs for the current stable version of FEniCS are only maintained for the most recent few Ubuntu releases.  Installing via the package manager on an old Ubuntu release may install an older version of FEniCS.
 * `libgfortran.so.3 cannot be found`, or other issues with `libgfortran` when using the Singularity container: Try adding `apt-get -y install libgfortran3` under the `%post` section in the file `singularity-recipe.def`.
