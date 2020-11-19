@@ -2,7 +2,7 @@
 This script demonstrates the implementation of the incompressible case of the
 hyperelastic Kirchhoff--Love shell formulation from
 
- http://www.public.iastate.edu/~jmchsu/files/Kiendl_et_al-2015-CMAME.pdf
+ https://web.me.iastate.edu/jmchsu/files/Kiendl_et_al-2015-CMAME.pdf
 
 We implement the neo-Hookean elastic potential for simplicity, but changing
 this involves altering only the short function psi_el().

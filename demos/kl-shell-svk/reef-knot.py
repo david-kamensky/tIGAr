@@ -2,7 +2,7 @@
 This example considers a simplified variant of the problem from 
 Section 4.4.3 of the paper
 
-  http://www.public.iastate.edu/~jmchsu/files/Kamensky_et_al-2017-CMAME.pdf
+  https://web.me.iastate.edu/jmchsu/files/Kamensky_et_al-2017-CMAME.pdf
 
 in which a nonlocal contact formulation---arguably a form of peridynamics---is 
 used to penalize interpenetration of shell structures.  The required 

@@ -11,7 +11,7 @@ discretization.
 
 The basic problem uses the geometry from Figure 4 of the paper
 
-  http://www.public.iastate.edu/~jmchsu/files/Kamensky_et_al-2017-CMAME.pdf
+  https://web.me.iastate.edu/jmchsu/files/Kamensky_et_al-2017-CMAME.pdf
 
 and involves a sphere moving downard with some initial velocity, then being 
 repelled by a potential that models contact with a stationary horizontal 
