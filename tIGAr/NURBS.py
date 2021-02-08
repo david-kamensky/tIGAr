@@ -14,7 +14,8 @@ class NURBSControlMesh(AbstractControlMesh):
     """
     This class represents a control mesh with NURBS geometry.
     """
-    def __init__(self,fname,useRect=USE_RECT_ELEM_DEFAULT):
+    def __init__(self,fname,useRect=USE_RECT_ELEM_DEFAULT,
+                 overRefine=0):
         """
         Generates a NURBS control mesh from PetIGA geometry input data 
         (as generated, e.g., by a separate ``igakit`` script) in the 
@@ -23,6 +24,12 @@ class NURBSControlMesh(AbstractControlMesh):
         control mesh.  The optional parameter ``useRect`` 
         is a Boolean specifying whether or not to use rectangular FEs for 
         the extraction.
+        The optional parameter ``overRefine``
+        indicates how many levels of refinement to apply beyond what is
+        needed to represent the spline functions; choosing a value greater
+        than the default of zero may be useful for
+        integrating functions with fine-scale features.
+        overRefine > 0 only works for useRect=False.
         """
 
         # get an igakit nurbs object from the file (or, directly from an
@@ -33,7 +40,7 @@ class NURBSControlMesh(AbstractControlMesh):
             ikNURBS = PetIGA().read(fname)
 
         # create a BSpline scalar space given the knot vector(s)
-        self.scalarSpline = BSpline(ikNURBS.degree,ikNURBS.knots,useRect)
+        self.scalarSpline = BSpline(ikNURBS.degree,ikNURBS.knots,useRect,overRefine)
         
         # get the control net; already in homogeneous form
         nvar = len(ikNURBS.degree)
