@@ -535,6 +535,7 @@ class ExtractedNonlinearProblem(NonlinearProblem):
         M = self.spline.assembleMatrix(self.tangent).mat()
         A.mat().setSizes(M.getSizes())
         A.mat().setUp()
+        A.mat().assemble()
         M.copy(result=A.mat())
         return A
 
