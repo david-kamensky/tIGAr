@@ -223,7 +223,7 @@ for i in range(0,N_STEPS):
 # proportional to mesh size, and the time integrator is of second order, this
 # will converge at second order, even if higher-order splines are used in
 # space.
-errRes = u - solnt*soln
+errRes = spline.pushforward(timeInt.x) - solnt*soln
 L2Error = sqrt(assemble(inner(errRes,errRes)*spline.dx))
 if(mpirank == 0):
     print("L2 Error = "+str(L2Error))
