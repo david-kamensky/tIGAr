@@ -11,21 +11,29 @@ import bisect
 from numpy import searchsorted
 
 
-def uniformKnots(p,start,end,N,periodic=False):
+def uniformKnots(p,start,end,N,periodic=False,continuityDrop=0):
     """
     Helper function to generate a uniform open knot vector of degree ``p`` with
     ``N`` elements.  If ``periodic``, end knots are not repeated.  
     Otherwise, they are repeated ``p+1`` times for an open knot vector.
+    Optionally, a drop in continuity can be set through the parameter
+    ``continuityDrop`` (i.e., interior knots would have multiplicity 
+    ``continuityDrop+1``).  Negative continuity (i.e., a discontinuous
+    B-spline) is not supported, so ``continuityDrop`` must be less than ``p``.
     """
+    if(continuityDrop >= p):
+        print("ERROR: Continuity drop too high for spline degree.")
+        exit()
     retval = []
     if(not periodic):
-        for i in range(0,p):
+        for i in range(0,p-continuityDrop):
             retval += [start,]
     h = (end - start)/float(N)
     for i in range(0,N+1):
-        retval += [start+float(i)*h,]
+        for j in range(0,continuityDrop+1):
+            retval += [start+float(i)*h,]
     if(not periodic):
-        for i in range(0,p):
+        for i in range(0,p-continuityDrop):
             retval += [end,]
     return retval
 
