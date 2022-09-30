@@ -834,7 +834,7 @@ class ExtractedSpline(object):
                        (self.cpFuncs[0].vector()).vec().getOwnershipRange()
         nLocalNodes = Iend - Istart
         MPETSc = PETSc.Mat(self.comm)
-        MPETSc.create(PETSc.COMM_WORLD)
+        MPETSc.create(self.comm)
         # arguments: [[localRows,localColumns],[globalRows,globalColums]]
         # or is it [[localRows,globalRows],[localColumns,globalColums]]?
         # the latter seems to be what comes out of getSizes()...
@@ -860,7 +860,7 @@ class ExtractedSpline(object):
         for i in range(0,self.nFields):
             totalDofs += ncp[i]
         MPETSc2 = PETSc.Mat(self.comm)
-        MPETSc2.create(PETSc.COMM_WORLD)
+        MPETSc2.create(self.comm)
         # arguments: [[localRows,localColumns],[globalRows,globalColums]]
         if(MPI.size(self.comm) > 1):
             MPETSc2.setSizes([[nLocalNodes,None],[None,totalDofs]])
