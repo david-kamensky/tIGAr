@@ -29,6 +29,23 @@ export PYTHONPATH=/path/to/repository/:$PYTHONPATH
 ```
 to your `~/.bashrc` file (and `source`-ing it).  To (optionally) build the API documentation, change directory to `docs` and type `make html`. The main documentation will then be in `./_build/html/index.html`, which can be opened with a web browser.  
 
+### Pixi (Linux/WSL)
+
+The repository includes a `pixi.toml` and `pyproject.toml` for a reproducible local environment:
+
+```bash
+pixi install
+```
+
+Then run demos through the Pixi environment from the repository root, e.g.:
+
+```bash
+pixi run python demos/poisson/poisson.py
+pixi run python demos/biharmonic/biharmonic.py
+```
+
+Because `tIGAr` is installed editable in the Pixi environment, no manual `PYTHONPATH` setup is required when using `pixi run ...`.
+
 ### On clusters
 The most convenient way to use FEniCS (and therefore tIGAr) on HPC clusters is via [Singularity](https://sylabs.io/singularity/).  A singularity recipe for using tIGAr is in the file `singularity-recipe.def`.  Some additional notes are provided in the comments of that file.  
 

@@ -65,7 +65,7 @@ for level in range(0,N_LEVELS):
     QUAD_DEG = 2*max(p,q)
 
     # Create the extracted spline directly from the generator.
-     spline = ExtractedSpline(splineGenerator,QUAD_DEG)
+    spline = ExtractedSpline(splineGenerator,QUAD_DEG)
 
     if(mpirank==0):
         print("Solving...")

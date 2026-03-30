@@ -1,0 +1,10 @@
+**/__pycache__/
+.pixi/
+pixi.lock
+*.egg-info/
+docs/_build/
+**/extraction/
+**/results/
+**/knot.iga
+**/smesh.*.dat
+demos/*/dissipationRate.dat

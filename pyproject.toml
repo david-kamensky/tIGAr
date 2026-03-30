@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools<81", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tIGAr"
+version = "2019.2"
+description = "Isogeometric analysis with FEniCS"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GNU LGPLv3" }
+authors = [{ name = "D. Kamensky" }]
+urls = { Homepage = "https://github.com/david-kamensky/tIGAr" }
+
+dependencies = [
+    "numpy",
+    "scipy",
+]
+
+[tool.setuptools]
+packages = ["tIGAr"]
